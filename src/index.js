@@ -15,12 +15,28 @@ import { enqueue, dequeue,
 import { startReactionGame, handleClick }        from "./games/reactionGame.js";
 
 // ── Server setup ──────────────────────────────────────────────────────────────
-
 const app = express();
-app.use(cors());
+
+const allowedOrigins = [
+  "http://localhost:4173",
+  "http://localhost:5173",
+  "https://arenagameplay.vercel.app"
+];
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`CORS policy: origin ${origin} is not allowed`));
+    }
+  },
+};
+
+app.use(cors(corsOptions));
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server, { cors: { origin: allowedOrigins } });
 
 // ── Game engine router ────────────────────────────────────────────────────────
 // When a room is full, kick off the right game engine.
