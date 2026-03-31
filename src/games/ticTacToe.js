@@ -3,20 +3,21 @@
  * Continuous-mode Tic Tac Toe engine.
  * Rounds restart automatically. Scores accumulate until a player ends the match.
  * 15-second move timer — forfeit round on timeout.
+ * Disconnect/refresh — forfeit match win awarded to opponent via handleTttForfeit.
  */
 
-import { getSession } from "../platform/sessionManager.js";
 import { getPlayerList } from "../platform/roomManager.js";
 
 const MOVE_TIMEOUT_MS = 15_000;
-const RESET_DELAY_MS  = 2_000;
+const RESET_DELAY_MS  = 2_500;
+const START_DELAY_MS  = 1_500;
 
 // ── Win patterns ──────────────────────────────────────────────────────────────
 
 const WIN_LINES = [
-  [0,1,2],[3,4,5],[6,7,8], // rows
-  [0,3,6],[1,4,7],[2,5,8], // cols
-  [0,4,8],[2,4,6],         // diags
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6],
 ];
 
 function checkWinner(board) {
@@ -32,15 +33,23 @@ function isDraw(board) {
   return board.every((cell) => cell !== null);
 }
 
-// ── State initialiser ─────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function getOpponent(room, socketId) {
+  return room.players.find((p) => p.id !== socketId) ?? null;
+}
+
+function isSafe(room) {
+  return room.state.ttt !== null && room.players.length === 2;
+}
+
+// ── State initialisers ────────────────────────────────────────────────────────
 
 function initMatchState(players) {
   const [p1, p2] = players;
   return {
     scores:    { [p1.id]: 0, [p2.id]: 0 },
-    // Symbols assigned once per match, stay for all rounds
     symbols:   { [p1.id]: "X", [p2.id]: "O" },
-    // X always goes first in every round
     firstTurn: p1.id,
     round:     0,
   };
@@ -48,17 +57,49 @@ function initMatchState(players) {
 
 function initRoundState(firstTurnId) {
   return {
-    board:      Array(9).fill(null),
-    turnId:     firstTurnId,  // socket id of player whose turn it is
-    finished:   false,
-    timer:      null,         // setTimeout handle
+    board:    Array(9).fill(null),
+    turnId:   firstTurnId,
+    finished: false,
+    timer:    null,
   };
+}
+
+// ── Timer ─────────────────────────────────────────────────────────────────────
+
+function clearTimer(room) {
+  const timer = room.state.ttt?.round?.timer;
+  if (timer) {
+    clearTimeout(timer);
+    room.state.ttt.round.timer = null;
+  }
+}
+
+function startTimer(io, room) {
+  if (!isSafe(room)) return;
+
+  const { round } = room.state.ttt;
+  clearTimer(room);
+
+  round.timer = setTimeout(() => {
+    if (!isSafe(room))  return;
+    if (round.finished) return;
+
+    const loser  = room.players.find((p) => p.id === round.turnId);
+    const winner = getOpponent(room, round.turnId);
+
+    if (!loser || !winner) {
+      round.finished = true;
+      return;
+    }
+
+    console.log(`[ttt] timeout — ${loser.id} forfeits round`);
+    endRound(io, room, winner.id, "timeout");
+  }, MOVE_TIMEOUT_MS);
 }
 
 // ── Engine ────────────────────────────────────────────────────────────────────
 
 export function startTicTacToe(io, room) {
-  // Initialise match state once
   if (!room.state.ttt) {
     room.state.ttt = {
       match: initMatchState(room.players),
@@ -66,102 +107,65 @@ export function startTicTacToe(io, room) {
     };
   }
 
-  // Delay the first round so clients have time to navigate to /game
-  // and register their ttt_update socket listener before it fires.
-  setTimeout(() => startRound(io, room), 1500);
+  setTimeout(() => {
+    if (!isSafe(room)) return;
+    startRound(io, room);
+  }, START_DELAY_MS);
 }
 
 function startRound(io, room) {
+  if (!isSafe(room)) return;
+
   const { match } = room.state.ttt;
   match.round += 1;
 
-  // Alternate who goes first each round
-  const firstTurnId = match.round % 2 === 1
-    ? match.firstTurn
-    : room.players.find((p) => p.id !== match.firstTurn).id;
+  const firstPlayer = match.round % 2 === 1
+    ? room.players.find((p) => p.id === match.firstTurn)
+    : room.players.find((p) => p.id !== match.firstTurn);
 
-  room.state.ttt.round = initRoundState(firstTurnId);
+  if (!firstPlayer) return;
 
+  room.state.ttt.round = initRoundState(firstPlayer.id);
   const { round } = room.state.ttt;
 
-  // Tell both players the initial state
   room.players.forEach((player) => {
     player.emit("ttt_update", {
-      board:      round.board,
-      turnId:     round.turnId,
-      yourSymbol: match.symbols[player.id],
-      scores:     match.scores,
-      timeLimit:  MOVE_TIMEOUT_MS,
+      board:       round.board,
+      turnId:      round.turnId,
+      yourSymbol:  match.symbols[player.id],
+      scores:      match.scores,
+      roundNumber: match.round,
+      timeLimit:   MOVE_TIMEOUT_MS,
     });
   });
 
-  console.log(`[ttt] room ${room.id} round ${match.round} started — ${round.turnId} goes first`);
+  console.log(`[ttt] round ${match.round} — ${firstPlayer.id} goes first`);
   startTimer(io, room);
 }
 
-// ── Move timer ────────────────────────────────────────────────────────────────
-
-function startTimer(io, room) {
-  const { round, match } = room.state.ttt;
-
-  clearTimer(room);
-
-  round.timer = setTimeout(() => {
-    if (!room.state.ttt)       return; // match was cleaned up
-    if (round.finished)        return;
-
-    // Guard: need exactly 2 players still connected
-    if (room.players.length < 2) {
-      round.finished = true;
-      return;
-    }
-
-    const loserId  = round.turnId;
-    const winner   = room.players.find((p) => p.id !== loserId);
-
-    if (!winner) {
-      // Can't determine winner — abort silently
-      round.finished = true;
-      return;
-    }
-
-    console.log(`[ttt] timeout — ${loserId} forfeits round`);
-    endRound(io, room, winner.id, "timeout");
-  }, MOVE_TIMEOUT_MS);
-}
-
-function clearTimer(room) {
-  if (room.state.ttt?.round?.timer) {
-    clearTimeout(room.state.ttt.round.timer);
-    room.state.ttt.round.timer = null;
-  }
-}
-
-// ── Handle move ───────────────────────────────────────────────────────────────
+// ── Move handler ──────────────────────────────────────────────────────────────
 
 export function handleTttMove(io, socket, room, cellIndex) {
+  if (!room.state.ttt) return;
+
   const { round, match } = room.state.ttt;
 
-  // Guard checks
-  if (!round || round.finished)          return;
-  if (socket.id !== round.turnId)        return; // not your turn
-  if (cellIndex < 0 || cellIndex > 8)   return;
-  if (round.board[cellIndex] !== null)   return; // cell taken
+  if (!round || round.finished)        return;
+  if (socket.id !== round.turnId)      return;
+  if (cellIndex < 0 || cellIndex > 8)  return;
+  if (round.board[cellIndex] !== null) return;
 
   clearTimer(room);
 
-  // Apply move
   round.board[cellIndex] = match.symbols[socket.id];
 
-  // Check outcome
   const winResult = checkWinner(round.board);
   const draw      = !winResult && isDraw(round.board);
 
   if (winResult) {
-    // Find socket id of the winner by symbol
     const winnerId = Object.entries(match.symbols)
       .find(([, sym]) => sym === winResult.winner)?.[0];
-    endRound(io, room, winnerId, null, winResult.line);
+    endRound(io, room, winnerId ?? null, null, winResult.line);
     return;
   }
 
@@ -170,17 +174,18 @@ export function handleTttMove(io, socket, room, cellIndex) {
     return;
   }
 
-  // Switch turn
-  round.turnId = room.players.find((p) => p.id !== socket.id).id;
+  const nextPlayer = getOpponent(room, socket.id);
+  if (!nextPlayer) return;
+  round.turnId = nextPlayer.id;
 
-  // Broadcast updated board
   room.players.forEach((player) => {
     player.emit("ttt_update", {
-      board:      round.board,
-      turnId:     round.turnId,
-      yourSymbol: match.symbols[player.id],
-      scores:     match.scores,
-      timeLimit:  MOVE_TIMEOUT_MS,
+      board:       round.board,
+      turnId:      round.turnId,
+      yourSymbol:  match.symbols[player.id],
+      scores:      match.scores,
+      roundNumber: match.round,
+      timeLimit:   MOVE_TIMEOUT_MS,
     });
   });
 
@@ -190,12 +195,12 @@ export function handleTttMove(io, socket, room, cellIndex) {
 // ── End round ─────────────────────────────────────────────────────────────────
 
 function endRound(io, room, winnerId, reason, winLine = null) {
-  const { round, match } = room.state.ttt;
+  if (!room.state.ttt) return;
 
+  const { round, match } = room.state.ttt;
   round.finished = true;
   clearTimer(room);
 
-  // Update scores
   if (winnerId) {
     match.scores[winnerId] = (match.scores[winnerId] ?? 0) + 1;
   }
@@ -205,58 +210,44 @@ function endRound(io, room, winnerId, reason, winLine = null) {
     ? players.find((p) => p.id === winnerId)?.name ?? "Unknown"
     : null;
 
-  // Emit round result to all players
   io.to(room.id).emit("ttt_round_result", {
     winnerId,
     winnerName,
-    reason,        // "draw" | "timeout" | null
-    winLine,       // [a,b,c] indices | null
-    board:         round.board,
-    scores:        match.scores,
+    reason,
+    winLine,
+    board:       round.board,
+    scores:      match.scores,
+    roundNumber: match.round,
   });
 
-  console.log(
-    `[ttt] round ${match.round} ended — ` +
-    `${winnerName ?? "draw"} ${reason ? `(${reason})` : ""}`
-  );
+  console.log(`[ttt] round ${match.round} — ${winnerName ?? "draw"} ${reason ? `(${reason})` : ""}`);
 
-  // Auto-restart next round after delay
+  const roundSnapshot = match.round;
   setTimeout(() => {
-    if (room.state.ttt) startRound(io, room);
+    if (!isSafe(room)) return;
+    if (match.round !== roundSnapshot) return;
+    startRound(io, room);
   }, RESET_DELAY_MS);
 }
 
-// ── Cleanup (call on disconnect) ──────────────────────────────────────────────
-
-export function cleanupTicTacToe(room) {
-  if (!room.state.ttt) return;
-  clearTimer(room);
-  if (room.state.ttt.round) {
-    room.state.ttt.round.finished = true;
-  }
-  room.state.ttt = null;
-  console.log(`[ttt] cleaned up room ${room.id}`);
-}
+// ── End match (voluntary) ─────────────────────────────────────────────────────
 
 export function handleTttEndMatch(io, socket, room) {
   if (!room.state.ttt) return;
 
   clearTimer(room);
-  room.state.ttt.round.finished = true;
+
+  if (room.state.ttt.round) {
+    room.state.ttt.round.finished = true;
+  }
 
   const { match } = room.state.ttt;
   const players   = getPlayerList(room);
-
-  // Determine overall winner by score
   const [p1, p2]  = room.players;
-  let overallWinnerId = null;
 
-  if (match.scores[p1.id] > match.scores[p2.id]) {
-    overallWinnerId = p1.id;
-  } else if (match.scores[p2.id] > match.scores[p1.id]) {
-    overallWinnerId = p2.id;
-  }
-  // If equal — draw, overallWinnerId stays null
+  let overallWinnerId = null;
+  if (match.scores[p1.id] > match.scores[p2.id])      overallWinnerId = p1.id;
+  else if (match.scores[p2.id] > match.scores[p1.id]) overallWinnerId = p2.id;
 
   const winnerName = overallWinnerId
     ? players.find((p) => p.id === overallWinnerId)?.name ?? "Unknown"
@@ -269,11 +260,62 @@ export function handleTttEndMatch(io, socket, room) {
     totalRounds: match.round,
   });
 
-  // Clean up
   room.state.ttt = null;
+  console.log(`[ttt] match over — ${winnerName ?? "draw"} | ${match.round} rounds`);
+}
+
+// ── Forfeit match (disconnect / refresh) ──────────────────────────────────────
+// Called by the server's disconnect handler and the /api/rooms/:id/forfeit
+// HTTP endpoint. Idempotent — safe to call from both paths without double-firing.
+//
+// Design: instead of ending mid-round with a confusing partial state,
+// we award the full match to the opponent immediately and emit ttt_match_over.
+// The disconnecting player is already gone; the opponent sees the result screen.
+
+export function handleTttForfeit(io, room, disconnectedPlayerId) {
+  // Idempotency guard — if HTTP beacon already ran, state is null.
+  if (!room.state.ttt) return;
+
+  clearTimer(room);
+
+  if (room.state.ttt.round) {
+    room.state.ttt.round.finished = true;
+  }
+
+  const { match } = room.state.ttt;
+  const players   = getPlayerList(room);
+
+  // The opponent is whoever is NOT the disconnecting player.
+  const winner = players.find((p) => p.id !== disconnectedPlayerId) ?? null;
+  const loser  = players.find((p) => p.id === disconnectedPlayerId) ?? null;
+
+  const winnerId   = winner?.id   ?? null;
+  const winnerName = winner?.name ?? null;
 
   console.log(
-    `[ttt] match ended in room ${room.id} — ` +
-    `${winnerName ?? "draw"} wins overall`
+    `[ttt] forfeit — ${loser?.id ?? disconnectedPlayerId} disconnected, ` +
+    `${winnerName ?? "opponent"} wins room ${room.id}`
   );
+
+  io.to(room.id).emit("ttt_match_over", {
+    winnerId,
+    winnerName,
+    scores:      match.scores,
+    totalRounds: match.round,
+    reason:      "forfeit", // lets the result screen show a tailored message
+  });
+
+  // Null out state so any subsequent calls (beacon race) are no-ops.
+  room.state.ttt = null;
+}
+
+// ── Cleanup on disconnect ─────────────────────────────────────────────────────
+// Used for non-ttt cleanup paths and testing teardown.
+
+export function cleanupTicTacToe(room) {
+  if (!room.state.ttt) return;
+  clearTimer(room);
+  if (room.state.ttt.round) room.state.ttt.round.filled = true;
+  room.state.ttt = null;
+  console.log(`[ttt] cleaned up room ${room.id}`);
 }

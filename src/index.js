@@ -13,13 +13,13 @@ import { enqueue, dequeue,
 
 // Game engines
 import { startReactionGame, handleClick }        from "./games/reactionGame.js";
-
 import { startTicTacToe,
          handleTttMove, handleTttEndMatch,
-         cleanupTicTacToe }               from "./games/ticTacToe.js";
- 
+         handleTttForfeit,
+         cleanupTicTacToe }                      from "./games/ticTacToe.js";
 
 // ── Server setup ──────────────────────────────────────────────────────────────
+
 const app = express();
 
 const allowedOrigins = [
@@ -39,17 +39,45 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(express.json());
 
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: allowedOrigins } });
 
-// ── Game engine router ────────────────────────────────────────────────────────
-// When a room is full, kick off the right game engine.
+// ── Forfeit HTTP endpoint (sendBeacon fallback) ───────────────────────────────
+// The socket disconnect handler is the primary forfeit mechanism.
+// This endpoint exists as a belt-and-suspenders catch for sendBeacon payloads
+// that arrive just before or just after the socket disconnect is processed.
+// It is intentionally idempotent — if the room is already cleaned up, it no-ops.
 
- 
+app.post("/api/rooms/:roomId/forfeit", (req, res) => {
+  const { roomId }  = req.params;
+  const { playerId } = req.body ?? {};
+
+  if (!playerId) return res.sendStatus(400);
+
+  const room = getRoom(roomId);
+
+  // Room already cleaned up by socket disconnect — nothing to do.
+  if (!room || room.gameType !== "tictactoe" || !room.state.ttt) {
+    return res.sendStatus(204);
+  }
+
+  // Only act if the player is still considered "in" the room.
+  const isInRoom = room.players.some((p) => p.id === playerId);
+  if (!isInRoom) return res.sendStatus(204);
+
+  console.log(`[forfeit-http] ${playerId} forfeited room ${roomId} via beacon`);
+  handleTttForfeit(io, room, playerId);
+
+  res.sendStatus(204);
+});
+
+// ── Game engine router ────────────────────────────────────────────────────────
+
 function startGame(room) {
   setRoomStatus(room.id, "in_progress");
- 
+
   switch (room.gameType) {
     case "reaction":
       startReactionGame(io, room);
@@ -57,83 +85,75 @@ function startGame(room) {
     case "tictactoe":
       startTicTacToe(io, room);
       break;
-    // case "hangman":   startHangman(io, room);   break;
     default:
       console.warn(`[server] no engine for gameType: ${room.gameType}`);
   }
 }
- 
+
 // ── Shared match-start helper ─────────────────────────────────────────────────
- 
+
 function launchMatch(room) {
   const players = getPlayerList(room);
- 
-  // Tell every player in the room who they're playing against
+
   room.players.forEach((player) => {
     player.emit("match_found", {
-      roomId:    room.id,
-      gameType:  room.gameType,
+      roomId:     room.id,
+      gameType:   room.gameType,
       inviteCode: room.inviteCode,
       players,
-      yourId:    player.id,
+      yourId:     player.id,
     });
   });
- 
+
   console.log(
     `[server] match started — ${room.id} (${room.gameType}) ` +
     `${players.map((p) => p.name).join(" vs ")}`
   );
- 
+
   startGame(room);
 }
- 
+
 // ── Socket events ─────────────────────────────────────────────────────────────
- 
+
 io.on("connection", (socket) => {
   console.log(`[socket] connected: ${socket.id}`);
- 
+
   // ── 1. Identity ─────────────────────────────────────────────────────────────
-  // Client sends this immediately after connect (from useSession in the frontend)
   socket.on("set_session", ({ name, avatarColor }) => {
     setSession(socket, { name, avatarColor });
     console.log(`[session] ${socket.id} → ${name} (${avatarColor})`);
   });
- 
+
   // ── 2. Lobby ────────────────────────────────────────────────────────────────
-  // Client joins the lobby "room" to receive live queue count updates
   socket.on("join_lobby", () => {
     socket.join("lobby");
-    // Send current counts immediately so the UI doesn't wait
     socket.emit("lobby_counts", getQueueCounts());
   });
- 
+
   socket.on("leave_lobby", () => {
     socket.leave("lobby");
   });
- 
+
   // ── 3. Quick match ──────────────────────────────────────────────────────────
   socket.on("find_match", ({ gameType }) => {
     const result = enqueue(socket, gameType);
-    broadcastCounts(io); // update lobby counts for everyone
- 
+    broadcastCounts(io);
+
     if (result.matched) {
       const [p1, p2] = result.players;
- 
-      // p1 creates the room, p2 joins it
       const room = createRoom(p1, gameType);
       room.players.push(p2);
       p2.join(room.id);
- 
-      broadcastCounts(io); // counts changed again after match
+      broadcastCounts(io);
       launchMatch(room);
     }
   });
- 
+
   socket.on("cancel_match", () => {
     dequeue(socket.id);
     broadcastCounts(io);
   });
- 
+
   // ── 4. Private room ─────────────────────────────────────────────────────────
   socket.on("create_room", ({ gameType }) => {
     const room = createRoom(socket, gameType);
@@ -143,70 +163,74 @@ io.on("connection", (socket) => {
       gameType:   room.gameType,
     });
   });
- 
+
   socket.on("join_room", ({ inviteCode }) => {
     const room = joinByInvite(socket, inviteCode);
- 
+
     if (!room) {
       socket.emit("join_error", { message: "Room not found or already started." });
       return;
     }
- 
+
     if (room.players.length === 2) {
       launchMatch(room);
     }
   });
- 
+
   // ── 5. In-game events ───────────────────────────────────────────────────────
   socket.on("click", ({ roomId }) => {
     const room = getRoom(roomId);
     if (!room) return;
     handleClick(io, socket, room);
   });
- 
+
   // ── 6. Tic Tac Toe events ────────────────────────────────────────────────────
   socket.on("ttt_move", ({ roomId, cellIndex }) => {
     const room = getRoom(roomId);
     if (!room) return;
     handleTttMove(io, socket, room, cellIndex);
   });
- 
+
   socket.on("ttt_end_match", ({ roomId }) => {
     const room = getRoom(roomId);
     if (!room) return;
     handleTttEndMatch(io, socket, room);
   });
- 
-  // ── 6. Disconnect ───────────────────────────────────────────────────────────
+
+  // ── 7. Disconnect ───────────────────────────────────────────────────────────
   socket.on("disconnect", () => {
     console.log(`[socket] disconnected: ${socket.id}`);
- 
-    // Remove from any matchmaking queue
+
+    // Remove from matchmaking queue
     const queuedGame = dequeue(socket.id);
     if (queuedGame) broadcastCounts(io);
- 
-    // Remove from any active room
+
+    // Remove from active room
     const room = handlePlayerLeave(socket.id);
-    if (room) {
-      // Cancel any running game timers first to prevent crashes
-      if (room.gameType === "tictactoe") cleanupTicTacToe(room);
- 
-      // Notify the remaining player
+    if (!room) return;
+
+    if (room.gameType === "tictactoe" && room.state.ttt) {
+      // Award forfeit win to the opponent — covers refresh, tab close, network drop.
+      // handleTttForfeit is idempotent: if the HTTP beacon already ran first,
+      // the ttt state will be null and it will no-op.
+      handleTttForfeit(io, room, socket.id);
+    } else {
+      // Non-ttt games: notify remaining player as before
       if (room.players.length > 0) {
         io.to(room.id).emit("opponent_left", {
           message: "Your opponent disconnected.",
         });
       }
-      // Clean up finished or now-empty rooms
-      if (room.players.length === 0 || room.status === "finished") {
-        removeRoom(room.id);
-      }
+    }
+
+    if (room.players.length === 0 || room.status === "finished") {
+      removeRoom(room.id);
     }
   });
 });
- 
+
 // ── Start ─────────────────────────────────────────────────────────────────────
- 
+
 server.listen(3000, () => {
   console.log("[server] running on port 3000");
 });
