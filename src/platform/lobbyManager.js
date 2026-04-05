@@ -7,7 +7,7 @@
 /** @type {Map<string, import("socket.io").Socket[]>} gameType → queue */
 const queues = new Map();
 
-const GAME_TYPES = ["reaction", "tictactoe", "hangman"];
+const GAME_TYPES = ["reaction", "tictactoe", "hangman", "connectfour", "wordle", "wouldyourather"];
 
 // Initialise empty queues for every game type
 GAME_TYPES.forEach((g) => queues.set(g, []));

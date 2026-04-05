@@ -17,6 +17,23 @@ import { startTicTacToe,
          handleTttMove, handleTttEndMatch,
          handleTttForfeit,
          cleanupTicTacToe }                      from "./games/ticTacToe.js";
+import { startHangman,
+         handleHmSubmitWord, handleHmGuess,
+         handleHmGiveHint, handleHmEndMatch,
+         handleHmForfeit,
+         cleanupHangman }                        from "./games/hangman.js";
+import { startConnectFour,
+         handleC4Move, handleC4EndMatch,
+         handleC4Forfeit,
+         cleanupConnectFour }                    from "./games/connectFour.js";
+import { startWordleDuel,
+         handleWdlGuess, handleWdlEndMatch,
+         handleWdlForfeit,
+         cleanupWordleDuel }                     from "./games/wordleDuel.js";
+import { startWouldYouRather,
+         handleWyrChoice, handleWyrEndMatch,
+         handleWyrForfeit,
+         cleanupWouldYouRather }                 from "./games/wouldYouRather.js";
 
 // ── Server setup ──────────────────────────────────────────────────────────────
 
@@ -58,17 +75,27 @@ app.post("/api/rooms/:roomId/forfeit", (req, res) => {
 
   const room = getRoom(roomId);
 
-  // Room already cleaned up by socket disconnect — nothing to do.
-  if (!room || room.gameType !== "tictactoe" || !room.state.ttt) {
-    return res.sendStatus(204);
-  }
+  if (!room) return res.sendStatus(204);
 
   // Only act if the player is still considered "in" the room.
   const isInRoom = room.players.some((p) => p.id === playerId);
   if (!isInRoom) return res.sendStatus(204);
 
   console.log(`[forfeit-http] ${playerId} forfeited room ${roomId} via beacon`);
-  handleTttForfeit(io, room, playerId);
+
+  if (room.gameType === "tictactoe" && room.state.ttt) {
+    handleTttForfeit(io, room, playerId);
+  } else if (room.gameType === "hangman" && room.state.hm) {
+    handleHmForfeit(io, room, playerId);
+  } else if (room.gameType === "connectfour" && room.state.c4) {
+    handleC4Forfeit(io, room, playerId);
+  } else if (room.gameType === "wordle" && room.state.wdl) {
+    handleWdlForfeit(io, room, playerId);
+  } else if (room.gameType === "wouldyourather" && room.state.wyr) {
+    handleWyrForfeit(io, room, playerId);
+  } else {
+    return res.sendStatus(204);
+  }
 
   res.sendStatus(204);
 });
@@ -84,6 +111,18 @@ function startGame(room) {
       break;
     case "tictactoe":
       startTicTacToe(io, room);
+      break;
+    case "hangman":
+      startHangman(io, room);
+      break;
+    case "connectfour":
+      startConnectFour(io, room);
+      break;
+    case "wordle":
+      startWordleDuel(io, room);
+      break;
+    case "wouldyourather":
+      startWouldYouRather(io, room);
       break;
     default:
       console.warn(`[server] no engine for gameType: ${room.gameType}`);
@@ -197,6 +236,70 @@ io.on("connection", (socket) => {
     handleTttEndMatch(io, socket, room);
   });
 
+  // ── 8. Hangman events ─────────────────────────────────────────────────────────
+  socket.on("hm_submit_word", ({ roomId, word }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleHmSubmitWord(io, socket, room, word);
+  });
+
+  socket.on("hm_guess", ({ roomId, letter }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleHmGuess(io, socket, room, letter);
+  });
+
+  socket.on("hm_give_hint", ({ roomId, hint }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleHmGiveHint(io, socket, room, hint);
+  });
+
+  socket.on("hm_end_match", ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleHmEndMatch(io, socket, room);
+  });
+
+  // ── 9. Connect Four events ──────────────────────────────────────────────────
+  socket.on("c4_move", ({ roomId, col }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleC4Move(io, socket, room, col);
+  });
+
+  socket.on("c4_end_match", ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleC4EndMatch(io, socket, room);
+  });
+
+  // ── 10. Wordle Duel events ──────────────────────────────────────────────────
+  socket.on("wdl_guess", ({ roomId, word }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleWdlGuess(io, socket, room, word);
+  });
+
+  socket.on("wdl_end_match", ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleWdlEndMatch(io, socket, room);
+  });
+
+  // ── 11. Would You Rather events ─────────────────────────────────────────────
+  socket.on("wyr_choice", ({ roomId, choice }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleWyrChoice(io, socket, room, choice);
+  });
+
+  socket.on("wyr_end_match", ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleWyrEndMatch(io, socket, room);
+  });
+
   // ── 7. Disconnect ───────────────────────────────────────────────────────────
   socket.on("disconnect", () => {
     console.log(`[socket] disconnected: ${socket.id}`);
@@ -210,12 +313,17 @@ io.on("connection", (socket) => {
     if (!room) return;
 
     if (room.gameType === "tictactoe" && room.state.ttt) {
-      // Award forfeit win to the opponent — covers refresh, tab close, network drop.
-      // handleTttForfeit is idempotent: if the HTTP beacon already ran first,
-      // the ttt state will be null and it will no-op.
       handleTttForfeit(io, room, socket.id);
+    } else if (room.gameType === "hangman" && room.state.hm) {
+      handleHmForfeit(io, room, socket.id);
+    } else if (room.gameType === "connectfour" && room.state.c4) {
+      handleC4Forfeit(io, room, socket.id);
+    } else if (room.gameType === "wordle" && room.state.wdl) {
+      handleWdlForfeit(io, room, socket.id);
+    } else if (room.gameType === "wouldyourather" && room.state.wyr) {
+      handleWyrForfeit(io, room, socket.id);
     } else {
-      // Non-ttt games: notify remaining player as before
+      // Non-engine games: notify remaining player as before
       if (room.players.length > 0) {
         io.to(room.id).emit("opponent_left", {
           message: "Your opponent disconnected.",
