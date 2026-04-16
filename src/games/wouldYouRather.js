@@ -192,6 +192,7 @@ function checkReveal(io, room, timeout) {
   round.revealed = true;
   clearTimer(room);
 
+  if (room.players.length < 2) return;
   const [p1, p2] = room.players;
   const c1 = round.choices[p1.id] ?? null;
   const c2 = round.choices[p2.id] ?? null;

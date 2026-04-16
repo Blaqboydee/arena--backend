@@ -357,7 +357,7 @@ function endRound(io, room) {
   const snap = match.round;
   setTimeout(() => {
     if (!isSafe(room)) return;
-    if (room.state.wdl?.match.round !== snap) return;
+    if (!room.state.wdl || room.state.wdl.match.round !== snap) return;
     startRound(io, room);
   }, ROUND_END_DELAY);
 }

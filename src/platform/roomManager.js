@@ -16,6 +16,33 @@ const rooms = new Map();
 /** @type {Map<string, string>} inviteCode → roomId */
 const inviteCodes = new Map();
 
+/** Max players per game type. Defaults to 2 for unlisted types. */
+const MAX_PLAYERS = {
+  reaction:       2,
+  tictactoe:      2,
+  hangman:        2,
+  connectfour:    2,
+  wordle:         2,
+  wouldyourather: 2,
+  memoryduel:     2,
+  triviaroyale:   8,
+  bombdefusal:    4,
+};
+
+/** Min players required to start. Defaults to 2. */
+const MIN_PLAYERS = {
+  triviaroyale: 3,
+  bombdefusal:  2,
+};
+
+export function getMaxPlayers(gameType) {
+  return MAX_PLAYERS[gameType] ?? 2;
+}
+
+export function getMinPlayers(gameType) {
+  return MIN_PLAYERS[gameType] ?? 2;
+}
+
 /**
  * @typedef {Object} Room
  * @property {string}   id
@@ -60,13 +87,14 @@ export function createRoom(socket, gameType) {
  * Returns the Room, or null if code is invalid / room is full.
  */
 export function joinByInvite(socket, inviteCode) {
+  if (!inviteCode) return null;
   const roomId = inviteCodes.get(inviteCode.toUpperCase());
   if (!roomId) return null;
 
   const room = rooms.get(roomId);
   if (!room) return null;
   if (room.status !== "waiting") return null;
-  if (room.players.length >= 2) return null;
+  if (room.players.length >= getMaxPlayers(room.gameType)) return null;
 
   room.players.push(socket);
   socket.join(room.id);

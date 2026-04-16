@@ -7,12 +7,14 @@ import cors from "cors";
 import { setSession, getSession }               from "./platform/sessionManager.js";
 import { createRoom, joinByInvite, getRoom,
          removeRoom, handlePlayerLeave,
-         getPlayerList, setRoomStatus }          from "./platform/roomManager.js";
+         getPlayerList, setRoomStatus,
+         getMaxPlayers, getMinPlayers }          from "./platform/roomManager.js";
 import { enqueue, dequeue,
          getQueueCounts, broadcastCounts }       from "./platform/lobbyManager.js";
 
 // Game engines
-import { startReactionGame, handleClick }        from "./games/reactionGame.js";
+import { startReactionGame, handleClick,
+         handleReactionForfeit }                  from "./games/reactionGame.js";
 import { startTicTacToe,
          handleTttMove, handleTttEndMatch,
          handleTttForfeit,
@@ -34,6 +36,18 @@ import { startWouldYouRather,
          handleWyrChoice, handleWyrEndMatch,
          handleWyrForfeit,
          cleanupWouldYouRather }                 from "./games/wouldYouRather.js";
+import { startMemoryDuel,
+         handleMemFlip, handleMemEndMatch,
+         handleMemForfeit,
+         cleanupMemoryDuel }                     from "./games/memoryDuel.js";
+import { startTriviaRoyale,
+         handleTrivAnswer, handleTrivEndMatch,
+         handleTrivForfeit,
+         cleanupTriviaRoyale }                   from "./games/triviaRoyale.js";
+import { startBombDefusal,
+         handleBombAction, handleBombEndMatch,
+         handleBombForfeit, handleBombRequestState,
+         cleanupBombDefusal }                    from "./games/bombDefusal.js";
 
 // ── Server setup ──────────────────────────────────────────────────────────────
 
@@ -93,6 +107,12 @@ app.post("/api/rooms/:roomId/forfeit", (req, res) => {
     handleWdlForfeit(io, room, playerId);
   } else if (room.gameType === "wouldyourather" && room.state.wyr) {
     handleWyrForfeit(io, room, playerId);
+  } else if (room.gameType === "memoryduel" && room.state.mem) {
+    handleMemForfeit(io, room, playerId);
+  } else if (room.gameType === "triviaroyale" && room.state.triv) {
+    handleTrivForfeit(io, room, playerId);
+  } else if (room.gameType === "bombdefusal" && room.state.bomb) {
+    handleBombForfeit(io, room, playerId);
   } else {
     return res.sendStatus(204);
   }
@@ -102,7 +122,7 @@ app.post("/api/rooms/:roomId/forfeit", (req, res) => {
 
 // ── Game engine router ────────────────────────────────────────────────────────
 
-function startGame(room) {
+function startGame(room, config = {}) {
   setRoomStatus(room.id, "in_progress");
 
   switch (room.gameType) {
@@ -124,6 +144,15 @@ function startGame(room) {
     case "wouldyourather":
       startWouldYouRather(io, room);
       break;
+    case "memoryduel":
+      startMemoryDuel(io, room);
+      break;
+    case "triviaroyale":
+      startTriviaRoyale(io, room, config.questionConfig);
+      break;
+    case "bombdefusal":
+      startBombDefusal(io, room);
+      break;
     default:
       console.warn(`[server] no engine for gameType: ${room.gameType}`);
   }
@@ -131,7 +160,7 @@ function startGame(room) {
 
 // ── Shared match-start helper ─────────────────────────────────────────────────
 
-function launchMatch(room) {
+function launchMatch(room, config = {}) {
   const players = getPlayerList(room);
 
   room.players.forEach((player) => {
@@ -149,7 +178,7 @@ function launchMatch(room) {
     `${players.map((p) => p.name).join(" vs ")}`
   );
 
-  startGame(room);
+  startGame(room, config);
 }
 
 // ── Socket events ─────────────────────────────────────────────────────────────
@@ -175,6 +204,12 @@ io.on("connection", (socket) => {
 
   // ── 3. Quick match ──────────────────────────────────────────────────────────
   socket.on("find_match", ({ gameType }) => {
+    // Party / co-op games can't be quick-matched — they require a private room
+    if (getMinPlayers(gameType) > 2) {
+      socket.emit("join_error", { message: "This game requires a private room. Create one and invite your friends!" });
+      return;
+    }
+
     const result = enqueue(socket, gameType);
     broadcastCounts(io);
 
@@ -211,9 +246,39 @@ io.on("connection", (socket) => {
       return;
     }
 
-    if (room.players.length === 2) {
+    const minPlayers = getMinPlayers(room.gameType);
+    const maxPlayers = getMaxPlayers(room.gameType);
+
+    if (maxPlayers <= 2 && room.players.length === 2) {
+      // Classic 2-player game: auto-start
       launchMatch(room);
+    } else {
+      // Multi-player room: notify all players of the update
+      const players = getPlayerList(room);
+      room.players.forEach((p) => {
+        p.emit("room_player_update", {
+          roomId:     room.id,
+          inviteCode: room.inviteCode,
+          gameType:   room.gameType,
+          players,
+          minPlayers,
+          maxPlayers,
+          canStart:   players.length >= minPlayers,
+        });
+      });
     }
+  });
+
+  // ── 4b. Host starts multi-player game ─────────────────────────────────────
+  socket.on("start_game", ({ roomId, questionConfig }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    if (room.status !== "waiting") return;
+    // Only the host (first player) can start
+    if (room.players[0]?.id !== socket.id) return;
+    const minPlayers = getMinPlayers(room.gameType);
+    if (room.players.length < minPlayers) return;
+    launchMatch(room, { questionConfig });
   });
 
   // ── 5. In-game events ───────────────────────────────────────────────────────
@@ -300,6 +365,50 @@ io.on("connection", (socket) => {
     handleWyrEndMatch(io, socket, room);
   });
 
+  // ── 12. Memory Duel events ──────────────────────────────────────────────────
+  socket.on("mem_flip", ({ roomId, cardId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleMemFlip(io, socket, room, cardId);
+  });
+
+  socket.on("mem_end_match", ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleMemEndMatch(io, socket, room);
+  });
+
+  // ── 13. Trivia Royale events ────────────────────────────────────────────────
+  socket.on("triv_answer", ({ roomId, choice }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleTrivAnswer(io, socket, room, choice);
+  });
+
+  socket.on("triv_end_match", ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleTrivEndMatch(io, socket, room);
+  });
+
+  // ── 14. Bomb Defusal events ─────────────────────────────────────────────────
+  socket.on("bomb_request_state", ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleBombRequestState(io, socket, room);
+  });
+  socket.on("bomb_action", ({ roomId, moduleIndex, data }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleBombAction(io, socket, room, { moduleIndex, data });
+  });
+
+  socket.on("bomb_end_match", ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    handleBombEndMatch(io, socket, room);
+  });
+
   // ── 7. Disconnect ───────────────────────────────────────────────────────────
   socket.on("disconnect", () => {
     console.log(`[socket] disconnected: ${socket.id}`);
@@ -322,6 +431,14 @@ io.on("connection", (socket) => {
       handleWdlForfeit(io, room, socket.id);
     } else if (room.gameType === "wouldyourather" && room.state.wyr) {
       handleWyrForfeit(io, room, socket.id);
+    } else if (room.gameType === "reaction" && room.state.match) {
+      handleReactionForfeit(io, room, socket.id);
+    } else if (room.gameType === "memoryduel" && room.state.mem) {
+      handleMemForfeit(io, room, socket.id);
+    } else if (room.gameType === "triviaroyale" && room.state.triv) {
+      handleTrivForfeit(io, room, socket.id);
+    } else if (room.gameType === "bombdefusal" && room.state.bomb) {
+      handleBombForfeit(io, room, socket.id);
     } else {
       // Non-engine games: notify remaining player as before
       if (room.players.length > 0) {

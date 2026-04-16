@@ -98,7 +98,6 @@ function startGuessTimer(io, room) {
 
     // Hint phase?
     if (round.wrongCount === MAX_WRONG - 1) {
-      emitUpdate(io, room);
       enterHintPhase(io, room);
       return;
     }
@@ -279,7 +278,6 @@ export function handleHmGuess(io, socket, room, letter) {
 
     // One limb left → setter must give a hint
     if (round.wrongCount === MAX_WRONG - 1) {
-      emitUpdate(io, room);
       enterHintPhase(io, room);
       return;
     }

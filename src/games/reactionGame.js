@@ -7,6 +7,7 @@ export function startReactionGame(io, room) {
     scores: {},
     round: 1,
     maxWins: 2,
+    finished: false,
   };
 
   // initialize scores
@@ -14,6 +15,8 @@ export function startReactionGame(io, room) {
     room.state.match.scores[p.id] = 0;
   });
 }
+
+  if (room.state.match.finished) return;
 
 room.state.round = {
   started: false,
@@ -31,6 +34,7 @@ room.state.round = {
   const delay = Math.random() * 3000 + 2000;
 
   setTimeout(() => {
+    if (room.state.match?.finished || room.players.length < 2) return;
     room.state.round.started = true;
     room.state.round.startTime = Date.now();
 
@@ -55,6 +59,7 @@ export function handleClick(io, socket, room) {
     round.finished = true;
 
     const opponent = room.players.find(p => p.id !== socket.id);
+    if (!opponent) return;
 
     match.scores[opponent.id]++;
 
@@ -111,6 +116,39 @@ function checkMatchEnd(io, room, winnerId, reason = null) {
 
   // start next round after short delay
   setTimeout(() => {
+    if (match.finished || room.players.length < 2) return;
     startReactionGame(io, room);
   }, 2000);
+}
+
+// ── Forfeit ───────────────────────────────────────────────────────────────────
+
+export function handleReactionForfeit(io, room, disconnectedPlayerId) {
+  if (!room.state.match) return;
+
+  room.state.match.finished = true;
+  if (room.state.round) room.state.round.finished = true;
+
+  const players = room.players;
+  const winner = players.find((p) => p.id !== disconnectedPlayerId);
+
+  if (winner) {
+    io.to(room.id).emit("game_result", {
+      winner: winner.id,
+      final: true,
+      scores: room.state.match.scores,
+      reason: "opponent_left",
+    });
+  }
+
+  room.state.match = null;
+  console.log(`[reaction] forfeit — ${disconnectedPlayerId} left`);
+}
+
+export function cleanupReactionGame(room) {
+  if (!room.state.match) return;
+  room.state.match.finished = true;
+  if (room.state.round) room.state.round.finished = true;
+  room.state.match = null;
+  console.log(`[reaction] cleaned up room ${room.id}`);
 }

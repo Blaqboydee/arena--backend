@@ -315,7 +315,7 @@ export function handleTttForfeit(io, room, disconnectedPlayerId) {
 export function cleanupTicTacToe(room) {
   if (!room.state.ttt) return;
   clearTimer(room);
-  if (room.state.ttt.round) room.state.ttt.round.filled = true;
+  if (room.state.ttt.round) room.state.ttt.round.finished = true;
   room.state.ttt = null;
   console.log(`[ttt] cleaned up room ${room.id}`);
 }
