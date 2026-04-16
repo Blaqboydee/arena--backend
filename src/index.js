@@ -67,13 +67,24 @@ const corsOptions = {
       callback(new Error(`CORS policy: origin ${origin} is not allowed`));
     }
   },
+  credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
 };
 
 app.use(cors(corsOptions));
 app.use(express.json());
 
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: allowedOrigins } });
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ["GET", "POST"],
+  },
+  transports: ["websocket", "polling"],
+  pingTimeout: 60000,
+  pingInterval: 25000,
+});
 
 // ── Forfeit HTTP endpoint (sendBeacon fallback) ───────────────────────────────
 // The socket disconnect handler is the primary forfeit mechanism.
