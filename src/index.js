@@ -75,6 +75,11 @@ app.use(cors(corsOptions));
 app.use(express.json());
 
 const server = http.createServer(app);
+
+// ╔══════════════════════════════════════════════════════════════════════════════╗
+// ║  LOCKED CONFIG — DO NOT MODIFY                                             ║
+// ║  Matches client socket.ts. Changing breaks mobile.                         ║
+// ╚══════════════════════════════════════════════════════════════════════════════╝
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
