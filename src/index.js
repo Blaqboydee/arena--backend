@@ -74,6 +74,11 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+// ── Health / wake-up ping ─────────────────────────────────────────────────────
+// Clients hit this on app load so Render's cold-start clock begins before the
+// user even navigates to the lobby.  Must stay above the socket.io setup.
+app.get("/ping", (_req, res) => res.sendStatus(200));
+
 const server = http.createServer(app);
 
 // ╔══════════════════════════════════════════════════════════════════════════════╗
