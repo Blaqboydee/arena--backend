@@ -15,14 +15,14 @@
  *
  * Timers:
  *   Word picking  — 45 s
- *   Guessing      — 15 s per guess
- *   Hint giving   — 20 s
+ *   Guessing      — 25 s per guess
+ *   Hint giving   — 60 s
  */
 
 import { getPlayerList } from "../platform/roomManager.js";
 
 const PICK_TIMEOUT_MS  = 45_000;
-const GUESS_TIMEOUT_MS = 15_000;
+const GUESS_TIMEOUT_MS = 25_000;
 const HINT_TIMEOUT_MS  = 60_000;
 const RESET_DELAY_MS   = 4_000;
 const START_DELAY_MS   = 1_500;

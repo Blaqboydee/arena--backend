@@ -1,6 +1,6 @@
 /**
  * bombDefusal.js
- * Co-op puzzle game (2–4 players). Inspired by "Keep Talking and Nobody Explodes".
+ * Co-op puzzle game (2–10 players). Inspired by "Keep Talking and Nobody Explodes".
  *
  * One player is the "Defuser" — they see bomb modules.
  * Others are "Experts" — they see instruction manuals but NOT the bomb.
@@ -19,7 +19,7 @@ import { getPlayerList } from "../platform/roomManager.js";
 
 const BOMB_TIME_MS     = 120_000;
 const MODULE_COUNT     = 3;
-const MAX_STRIKES      = 2;
+const MAX_STRIKES      = 3;
 
 // ── Wire module rules ─────────────────────────────────────────────────────────
 

@@ -53,15 +53,49 @@ import { startBombDefusal,
 
 const app = express();
 
-const allowedOrigins = [
+const staticAllowedOrigins = [
   "http://localhost:4173",
   "http://localhost:5173",
+  "http://127.0.0.1:4173",
+  "http://127.0.0.1:5173",
   "https://arenagameplay.vercel.app"
 ];
 
+const allowedOrigins = [
+  ...new Set(
+    [
+      ...staticAllowedOrigins,
+      ...(process.env.CORS_ALLOWED_ORIGINS ?? "")
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ]
+  ),
+];
+
+const devOriginPatterns = [
+  /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/,
+  /^https?:\/\/(192\.168\.\d{1,3}\.\d{1,3})(:\d+)?$/,
+  /^https?:\/\/(10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/,
+  /^https?:\/\/172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}(:\d+)?$/,
+  /^https:\/\/[a-z0-9-]+\.(ngrok-free\.app|ngrok-free\.dev)$/,
+  /^https:\/\/[a-z0-9-]+\.loca\.lt$/,
+];
+
+function isAllowedOrigin(origin) {
+  if (!origin) return true;
+  if (allowedOrigins.includes(origin)) return true;
+
+  if (process.env.NODE_ENV !== "production") {
+    return devOriginPatterns.some((pattern) => pattern.test(origin));
+  }
+
+  return false;
+}
+
 const corsOptions = {
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
       callback(new Error(`CORS policy: origin ${origin} is not allowed`));
@@ -87,7 +121,13 @@ const server = http.createServer(app);
 // ╚══════════════════════════════════════════════════════════════════════════════╝
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Socket CORS policy: origin ${origin} is not allowed`));
+      }
+    },
     credentials: true,
     methods: ["GET", "POST"],
   },
@@ -477,6 +517,10 @@ io.on("connection", (socket) => {
 
 // ── Start ─────────────────────────────────────────────────────────────────────
 
-server.listen(3000, () => {
-  console.log("[server] running on port 3000");
+const port = Number(process.env.PORT) || 3000;
+const host = process.env.HOST || "0.0.0.0";
+
+server.listen(port, host, () => {
+  console.log(`[server] running on ${host}:${port}`);
+  console.log(`[server] explicit allowed origins: ${allowedOrigins.join(", ") || "none"}`);
 });

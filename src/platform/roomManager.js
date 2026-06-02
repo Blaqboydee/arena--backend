@@ -25,8 +25,8 @@ const MAX_PLAYERS = {
   wordle:         2,
   wouldyourather: 2,
   memoryduel:     2,
-  triviaroyale:   8,
-  bombdefusal:    4,
+  triviaroyale:   10,
+  bombdefusal:    10,
 };
 
 /** Min players required to start. Defaults to 2. */
