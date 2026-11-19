@@ -63,7 +63,9 @@ const staticAllowedOrigins = [
   "http://localhost:5173",
   "http://127.0.0.1:4173",
   "http://127.0.0.1:5173",
-  "https://arenagameplay.vercel.app"
+  "https://arenagameplay.vercel.app",
+  "https://arenagameplay.app",
+  "https://www.arenagameplay.app"
 ];
 
 const allowedOrigins = [
