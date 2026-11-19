@@ -19,8 +19,10 @@
   "type": "module",
   "dependencies": {
     "@prisma/client": "^6.1.0",
+    "@socket.io/redis-adapter": "^8.3.0",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "ioredis": "^5.4.1",
     "nanoid": "^5.1.7",
     "prisma": "^6.1.0",
     "socket.io": "^4.8.3",

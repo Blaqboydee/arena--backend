@@ -12,6 +12,9 @@ import { createRoom, joinByInvite, getRoom,
 import { enqueue, dequeue,
          getQueueCounts, broadcastCounts }       from "./platform/lobbyManager.js";
 import { resolveOrCreateUser, updateProfile }    from "./platform/identityManager.js";
+import { setupRedisAdapter }                      from "./platform/scaling.js";
+import { flushPendingMatches }                    from "./platform/matchRecorder.js";
+import { prisma }                                 from "./db.js";
 
 // Game engines
 import { startReactionGame, handleClick,
@@ -560,7 +563,51 @@ io.on("connection", (socket) => {
 const port = Number(process.env.PORT) || 3000;
 const host = process.env.HOST || "0.0.0.0";
 
+// Attach the Redis adapter (no-op without REDIS_URL) before we accept connections.
+const redisClients = await setupRedisAdapter(io);
+
 server.listen(port, host, () => {
   console.log(`[server] running on ${host}:${port}`);
   console.log(`[server] explicit allowed origins: ${allowedOrigins.join(", ") || "none"}`);
 });
+
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
+// Render (and most hosts) send SIGTERM on deploy, then SIGKILL ~30s later. We use
+// that window to tell clients we're restarting (they auto-reconnect), stop taking
+// new work, flush in-flight match writes, and close infra cleanly — so a deploy
+// no longer silently drops data mid-write.
+
+let shuttingDown = false;
+
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[server] ${signal} received — graceful shutdown`);
+
+  // Safety net: never hang the platform's kill window.
+  const force = setTimeout(() => {
+    console.error("[server] forced exit (cleanup took too long)");
+    process.exit(1);
+  }, 8_000);
+  force.unref();
+
+  try {
+    io.emit("server_restarting", { message: "Server is updating — reconnecting shortly." });
+    io.close();
+    server.close();
+    await flushPendingMatches();
+    if (redisClients) {
+      redisClients.pubClient.quit();
+      redisClients.subClient.quit();
+    }
+    if (prisma) await prisma.$disconnect();
+    console.log("[server] shutdown complete");
+    process.exit(0);
+  } catch (err) {
+    console.error("[server] shutdown error:", err.message);
+    process.exit(1);
+  }
+}
+
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT",  () => shutdown("SIGINT"));

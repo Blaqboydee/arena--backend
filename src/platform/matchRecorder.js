@@ -17,6 +17,18 @@
 
 import { prisma, dbEnabled } from "../db.js";
 
+// In-flight writes, so graceful shutdown can flush them before the process exits
+// (finishMatch is fire-and-forget, so a deploy could otherwise drop a record
+// mid-write).
+const pendingWrites = new Set();
+
+/** Await all in-flight match writes. Called during graceful shutdown. */
+export async function flushPendingMatches() {
+  if (pendingWrites.size === 0) return;
+  console.log(`[match] flushing ${pendingWrites.size} pending write(s)…`);
+  await Promise.allSettled([...pendingWrites]);
+}
+
 /**
  * @param {object} room
  * @param {object} opts
@@ -43,25 +55,26 @@ export async function finishMatch(room, { winnerSocketId = null, scores = {}, st
     return status === "abandoned" ? "forfeit" : "loss";
   };
 
-  try {
-    await prisma.match.create({
-      data: {
-        gameType: room.gameType,
-        roomId:   room.id,
-        status,
-        endedAt:  new Date(),
-        winnerId: winner?.userId ?? null,
-        participants: {
-          create: participants.map((p) => ({
-            userId: p.userId,
-            score:  scores[p.socketId] ?? 0,
-            result: resultFor(p.socketId),
-          })),
-        },
+  const write = prisma.match.create({
+    data: {
+      gameType: room.gameType,
+      roomId:   room.id,
+      status,
+      endedAt:  new Date(),
+      winnerId: winner?.userId ?? null,
+      participants: {
+        create: participants.map((p) => ({
+          userId: p.userId,
+          score:  scores[p.socketId] ?? 0,
+          result: resultFor(p.socketId),
+        })),
       },
-    });
-    console.log(`[match] recorded ${room.gameType} ${room.id} (${status}) — winner ${winner?.userId ?? "draw"}`);
-  } catch (err) {
-    console.error("[match] finishMatch failed:", err.message);
-  }
+    },
+  })
+    .then(() => console.log(`[match] recorded ${room.gameType} ${room.id} (${status}) — winner ${winner?.userId ?? "draw"}`))
+    .catch((err) => console.error("[match] finishMatch failed:", err.message));
+
+  pendingWrites.add(write);
+  write.finally(() => pendingWrites.delete(write));
+  await write;
 }

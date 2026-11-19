@@ -66,6 +66,7 @@ Enable it by setting `DATABASE_URL`.
 1. **Environment** → set in the Render dashboard:
    - `DATABASE_URL` — your Neon connection string.
    - `NODE_ENV=production` — disables the permissive dev CORS patterns.
+   - `REDIS_URL` — *optional*, only if running multiple instances (see Scaling).
 2. **Build command**: `npm install && npm run db:deploy`
    (`npm install` regenerates the Prisma client via `postinstall`; `db:deploy`
    applies any committed migrations. `prisma` is a regular dependency so this
@@ -74,6 +75,33 @@ Enable it by setting `DATABASE_URL`.
 
 With no `DATABASE_URL` the deploy still boots — in ephemeral mode — so a missing
 env var degrades instead of crashing.
+
+## Scaling
+
+The server runs **single-instance by default** and handles a lot: a local load
+test sustained **900 concurrent players / 450 simultaneous matches with zero
+errors and ~1ms connect latency**. Games are light (turn-based, small payloads),
+so the practical ceiling is instance size (RAM/CPU), not the code — scale
+**vertically** first.
+
+**Resilience (always on):** on `SIGTERM`/`SIGINT` (e.g. a Render deploy) the
+server shuts down gracefully — tells clients it's restarting (they auto-reconnect),
+stops taking new work, and **flushes in-flight match writes** so a deploy never
+drops a result mid-write.
+
+**Horizontal (optional):** set `REDIS_URL` to enable the Socket.IO Redis adapter,
+which propagates broadcasts across instances. This is the foundation for running
+multiple instances. Note: the adapter handles cross-instance *broadcasts*; fully
+splitting a single live game across instances (inbound move routing / room
+ownership) is a further step not yet implemented, so run matched games on a
+single instance (or add room affinity) until then.
+
+**Load testing:**
+
+```bash
+node tools/loadtest.mjs --url http://localhost:3000 --pairs 150
+node tools/loadtest.mjs --url https://your-app.onrender.com --pairs 50
+```
 
 ## Identity model (hybrid guest + claimable account)
 
