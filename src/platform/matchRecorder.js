@@ -22,6 +22,12 @@ import { prisma, dbEnabled } from "../db.js";
 // mid-write).
 const pendingWrites = new Set();
 
+// 1v1 competitive games that move ELO. Co-op (bomb), social (would-you-rather)
+// and multiplayer (trivia) still record stats/history but don't affect rating.
+const RANKED_1V1 = new Set(["reaction", "tictactoe", "hangman", "connectfour", "wordle", "memoryduel"]);
+const K_FACTOR = 32;
+const DEFAULT_RATING = 1000;
+
 /** Await all in-flight match writes. Called during graceful shutdown. */
 export async function flushPendingMatches() {
   if (pendingWrites.size === 0) return;
@@ -62,6 +68,28 @@ export async function finishMatch(room, { winnerSocketId = null, scores = {}, st
     l: result === "loss" || result === "forfeit" ? 1 : 0,
   });
 
+  // ── ELO (ranked 1v1 only) ─────────────────────────────────────────────────
+  // Read both current ratings, compute a zero-sum update. Kept outside the
+  // transaction (a read); a simultaneous match for the same player is rare.
+  let elo = null; // { [userId]: { rating, delta } }
+  if (RANKED_1V1.has(room.gameType) && participants.length === 2 && !coopResult) {
+    const [pa, pb] = participants;
+    const current = await prisma.user.findMany({
+      where: { id: { in: [pa.userId, pb.userId] } },
+      select: { id: true, rating: true },
+    });
+    const ra = current.find((u) => u.id === pa.userId)?.rating ?? DEFAULT_RATING;
+    const rb = current.find((u) => u.id === pb.userId)?.rating ?? DEFAULT_RATING;
+    const resA = resultFor(pa.socketId);
+    const sa = resA === "win" ? 1 : resA === "draw" ? 0.5 : 0;
+    const ea = 1 / (1 + Math.pow(10, (rb - ra) / 400));
+    const da = Math.round(K_FACTOR * (sa - ea));
+    elo = {
+      [pa.userId]: { rating: ra + da, delta: da },
+      [pb.userId]: { rating: rb - da, delta: -da },
+    };
+  }
+
   // One transaction: the Match + MatchParticipants, plus denormalized stat bumps
   // on each User and their per-game UserGameStat — so the leaderboard stays a
   // cheap ORDER BY and profiles read a single row.
@@ -75,9 +103,10 @@ export async function finishMatch(room, { winnerSocketId = null, scores = {}, st
         winnerId: winner?.userId ?? null,
         participants: {
           create: participants.map((p) => ({
-            userId: p.userId,
-            score:  scores[p.socketId] ?? 0,
-            result: resultFor(p.socketId),
+            userId:      p.userId,
+            score:       scores[p.socketId] ?? 0,
+            result:      resultFor(p.socketId),
+            ratingDelta: elo?.[p.userId]?.delta ?? null,
           })),
         },
       },
@@ -94,6 +123,7 @@ export async function finishMatch(room, { winnerSocketId = null, scores = {}, st
           wins:   { increment: w },
           draws:  { increment: d },
           losses: { increment: l },
+          ...(elo?.[p.userId] ? { rating: elo[p.userId].rating } : {}),
         },
       }),
       prisma.userGameStat.upsert({

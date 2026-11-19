@@ -11,7 +11,7 @@ const router = Router();
 
 const PLAYER_SELECT = {
   id: true, displayName: true, avatarColor: true, avatar: true,
-  wins: true, losses: true, draws: true, gamesPlayed: true,
+  rating: true, wins: true, losses: true, draws: true, gamesPlayed: true,
 };
 
 function withWinRate(p) {
@@ -32,7 +32,7 @@ router.get("/leaderboard", async (req, res) => {
     if (game === "all") {
       const rows = await prisma.user.findMany({
         where:   { gamesPlayed: { gt: 0 } },
-        orderBy: [{ wins: "desc" }, { gamesPlayed: "asc" }, { draws: "desc" }],
+        orderBy: [{ rating: "desc" }, { wins: "desc" }, { gamesPlayed: "asc" }],
         take:    limit,
         select:  PLAYER_SELECT,
       });
@@ -42,11 +42,11 @@ router.get("/leaderboard", async (req, res) => {
         where:   { gameType: game, played: { gt: 0 } },
         orderBy: [{ wins: "desc" }, { played: "asc" }],
         take:    limit,
-        include: { user: { select: { id: true, displayName: true, avatarColor: true, avatar: true } } },
+        include: { user: { select: { id: true, displayName: true, avatarColor: true, avatar: true, rating: true } } },
       });
       players = rows.map((r) => withWinRate({
         id: r.user.id, displayName: r.user.displayName, avatarColor: r.user.avatarColor, avatar: r.user.avatar,
-        wins: r.wins, losses: r.losses, draws: r.draws, gamesPlayed: r.played,
+        rating: r.user.rating, wins: r.wins, losses: r.losses, draws: r.draws, gamesPlayed: r.played,
       }));
     }
 
@@ -77,7 +77,7 @@ router.get("/users/:id", async (req, res) => {
         where:   { userId: user.id },
         orderBy: { createdAt: "desc" },
         take:    10,
-        select:  { result: true, score: true, createdAt: true,
+        select:  { result: true, score: true, ratingDelta: true, createdAt: true,
                    match: { select: { gameType: true, status: true, endedAt: true } } },
       }),
     ]);
@@ -87,7 +87,7 @@ router.get("/users/:id", async (req, res) => {
       gameStats: gameStats.map((g) => withWinRate({ ...g, gamesPlayed: g.played })),
       recentMatches: recent.map((r) => ({
         gameType: r.match.gameType, result: r.result, score: r.score,
-        status: r.match.status, endedAt: r.match.endedAt,
+        ratingDelta: r.ratingDelta, status: r.match.status, endedAt: r.match.endedAt,
       })),
     });
   } catch (err) {

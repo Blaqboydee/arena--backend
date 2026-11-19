@@ -37,6 +37,7 @@ model User {
   losses      Int @default(0) // includes forfeits
   draws       Int @default(0)
   gamesPlayed Int @default(0)
+  rating      Int @default(1000) // ELO; only 1v1 competitive games move it
 
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -49,6 +50,7 @@ model User {
 
   @@index([lastSeenAt])
   @@index([wins])
+  @@index([rating])
 }
 
 // Per-game breakdown of a player's record (powers per-game leaderboards and the
@@ -110,9 +112,10 @@ model MatchParticipant {
   userId  String
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  score     Int      @default(0)
-  result    String // "win" | "loss" | "draw" | "forfeit"
-  createdAt DateTime @default(now())
+  score       Int      @default(0)
+  result      String // "win" | "loss" | "draw" | "forfeit"
+  ratingDelta Int? // ELO change for this match (ranked 1v1 only)
+  createdAt   DateTime @default(now())
 
   @@unique([matchId, userId])
   @@index([userId])
