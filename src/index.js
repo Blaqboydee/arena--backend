@@ -11,6 +11,7 @@ import { createRoom, joinByInvite, getRoom,
          getMaxPlayers, getMinPlayers }          from "./platform/roomManager.js";
 import { enqueue, dequeue,
          getQueueCounts, broadcastCounts }       from "./platform/lobbyManager.js";
+import { resolveOrCreateUser, updateProfile }    from "./platform/identityManager.js";
 
 // Game engines
 import { startReactionGame, handleClick,
@@ -247,10 +248,40 @@ function launchMatch(room, config = {}) {
 io.on("connection", (socket) => {
   console.log(`[socket] connected: ${socket.id}`);
 
+  // ── 0. Persistent identity ───────────────────────────────────────────────────
+  // Resolve (or mint) a durable guest User from the handshake token so a
+  // returning player keeps the same identity across sessions and devices.
+  //
+  // Stored as a promise on the socket so set_session can await it: the client
+  // fires set_session the instant it connects, which races ahead of this DB
+  // round-trip. Without the await, the player's chosen name/color would be
+  // dropped (userId isn't known yet) and the guest saved as "Anonymous".
+  //
+  // Best-effort: if persistence is off the socket still works, keyed on socket.id.
+  socket.data.identityReady = resolveOrCreateUser(socket.handshake.auth?.token || null)
+    .then((identity) => {
+      if (!identity) return;
+      socket.data.userId = identity.userId;
+      // Prime defaults ONLY if set_session hasn't already set a live choice —
+      // never clobber the name/color the player just picked.
+      if (!socket.data.name)        socket.data.name        = identity.name;
+      if (!socket.data.avatarColor) socket.data.avatarColor = identity.avatarColor;
+      socket.emit("identity", {
+        userId:      identity.userId,
+        token:       identity.token,
+        name:        identity.name,
+        avatarColor: identity.avatarColor,
+      });
+    })
+    .catch((err) => console.error("[identity] resolve failed:", err.message));
+
   // ── 1. Identity ─────────────────────────────────────────────────────────────
-  socket.on("set_session", ({ name, avatarColor }) => {
+  socket.on("set_session", async ({ name, avatarColor }) => {
     setSession(socket, { name, avatarColor });
-    console.log(`[session] ${socket.id} → ${name} (${avatarColor})`);
+    const profile = getSession(socket);                // sanitised name/color
+    await socket.data.identityReady;                   // ensure userId is resolved
+    await updateProfile(socket.data.userId, profile);  // no-ops if not persisted
+    console.log(`[session] ${socket.id} → ${profile.name} (${profile.avatarColor})`);
   });
 
   // ── 2. Lobby ────────────────────────────────────────────────────────────────

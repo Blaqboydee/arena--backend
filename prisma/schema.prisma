@@ -1,0 +1,90 @@
+// Arena — persistence schema (Step 1: identity foundation)
+//
+// Design notes:
+// • `User` is the durable identity. A guest is a User with `isGuest = true` and a
+//   `guestToken` (minted on first connect, stored in the client's localStorage).
+// • Claiming an account (Google / email magic-link, a later step) attaches an
+//   `Identity` row to the same User, flips `isGuest` to false, and keeps all
+//   history intact — this is the "hybrid guest + claimable account" model.
+// • `Match` / `MatchParticipant` are defined now but populated in Step 2
+//   (match recording). They're what leaderboards, ELO, leagues and tournaments
+//   will read from.
+//
+// The in-match player key stays `socket.id` on the server; `User.id` is the
+// *persistent* key that these tables reference.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  // Durable guest token — unique per device, null once/if you prefer to rotate.
+  guestToken  String?  @unique
+  displayName String   @default("Anonymous")
+  avatarColor String   @default("amber")
+  isGuest     Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  lastSeenAt  DateTime @default(now())
+
+  identities     Identity[]
+  participations MatchParticipant[]
+  wonMatches     Match[]            @relation("MatchWinner")
+
+  @@index([lastSeenAt])
+}
+
+// External auth identities linked to a User (claimed accounts).
+model Identity {
+  id         String   @id @default(cuid())
+  provider   String // "google" | "email" | ...
+  providerId String // external subject id / email
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([provider, providerId])
+  @@index([userId])
+}
+
+// One completed (or abandoned) game. Populated in Step 2.
+model Match {
+  id        String   @id @default(cuid())
+  gameType  String
+  roomId    String?
+  status    String   @default("completed") // "completed" | "abandoned"
+  startedAt DateTime @default(now())
+  endedAt   DateTime @default(now())
+
+  winnerId String? // User.id of winner; null = draw / no winner
+  winner   User?   @relation("MatchWinner", fields: [winnerId], references: [id])
+
+  participants MatchParticipant[]
+
+  @@index([gameType])
+  @@index([winnerId])
+  @@index([endedAt])
+}
+
+// A player's slot in a match (result + score). Populated in Step 2.
+model MatchParticipant {
+  id      String @id @default(cuid())
+  matchId String
+  match   Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  score     Int      @default(0)
+  result    String // "win" | "loss" | "draw" | "forfeit"
+  createdAt DateTime @default(now())
+
+  @@unique([matchId, userId])
+  @@index([userId])
+}
