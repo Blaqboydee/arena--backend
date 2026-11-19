@@ -1,3 +1,5 @@
+import { finishMatch } from "../platform/matchRecorder.js";
+
 export function startReactionGame(io, room) {
   const { id: roomId } = room;
 
@@ -98,6 +100,8 @@ function checkMatchEnd(io, room, winnerId, reason = null) {
       reason,
     });
 
+    finishMatch(room, { winnerSocketId: winnerId, scores: match.scores, status: "completed" });
+
     // reset match for future (optional)
     room.state.match = null;
 
@@ -140,6 +144,8 @@ export function handleReactionForfeit(io, room, disconnectedPlayerId) {
       reason: "opponent_left",
     });
   }
+
+  finishMatch(room, { winnerSocketId: winner?.id ?? null, scores: room.state.match.scores, status: "abandoned" });
 
   room.state.match = null;
   console.log(`[reaction] forfeit — ${disconnectedPlayerId} left`);

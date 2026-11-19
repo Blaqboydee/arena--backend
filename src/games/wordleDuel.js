@@ -7,6 +7,7 @@
  */
 
 import { getPlayerList } from "../platform/roomManager.js";
+import { finishMatch }   from "../platform/matchRecorder.js";
 
 const MAX_GUESSES       = 6;
 const WORD_LENGTH       = 5;
@@ -388,6 +389,8 @@ export function handleWdlEndMatch(io, socket, room) {
     totalRounds: match.round,
   });
 
+  finishMatch(room, { winnerSocketId: overallWinnerId, scores: match.scores, status: "completed" });
+
   room.state.wdl = null;
   console.log(`[wdl] match over — ${winnerName ?? "draw"}`);
 }
@@ -410,6 +413,8 @@ export function handleWdlForfeit(io, room, disconnectedPlayerId) {
     totalRounds: match.round,
     reason:      "forfeit",
   });
+
+  finishMatch(room, { winnerSocketId: winner?.id ?? null, scores: match.scores, status: "abandoned" });
 
   room.state.wdl = null;
 }

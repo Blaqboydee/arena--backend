@@ -6,6 +6,7 @@
  */
 
 import { getPlayerList } from "../platform/roomManager.js";
+import { finishMatch }   from "../platform/matchRecorder.js";
 
 const ROWS         = 6;
 const COLS         = 7;
@@ -312,6 +313,8 @@ export function handleC4EndMatch(io, socket, room) {
     totalRounds: match.round,
   });
 
+  finishMatch(room, { winnerSocketId: overallWinnerId, scores: match.scores, status: "completed" });
+
   room.state.c4 = null;
   console.log(`[c4] match over — ${winnerName ?? "draw"} | ${match.round} rounds`);
 }
@@ -335,6 +338,8 @@ export function handleC4Forfeit(io, room, disconnectedPlayerId) {
     totalRounds: match.round,
     reason:      "forfeit",
   });
+
+  finishMatch(room, { winnerSocketId: winner?.id ?? null, scores: match.scores, status: "abandoned" });
 
   room.state.c4 = null;
 }

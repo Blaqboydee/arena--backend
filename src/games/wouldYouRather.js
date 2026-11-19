@@ -6,6 +6,7 @@
  */
 
 import { getPlayerList } from "../platform/roomManager.js";
+import { finishMatch }   from "../platform/matchRecorder.js";
 
 const START_DELAY    = 1_500;
 const REVEAL_DELAY   = 5_000;
@@ -240,6 +241,8 @@ export function handleWyrEndMatch(io, socket, room) {
     disagrees:   match.disagrees,
   });
 
+  finishMatch(room, { winnerSocketId: null, scores: {}, status: "completed" });
+
   room.state.wyr = null;
   console.log(`[wyr] match over — ${match.round} rounds, ${match.agrees} agrees, ${match.disagrees} disagrees`);
 }
@@ -258,6 +261,8 @@ export function handleWyrForfeit(io, room, disconnectedPlayerId) {
     disagrees:   match.disagrees,
     reason:      "forfeit",
   });
+
+  finishMatch(room, { winnerSocketId: null, scores: {}, status: "abandoned" });
 
   room.state.wyr = null;
 }

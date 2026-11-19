@@ -7,6 +7,7 @@
  */
 
 import { getPlayerList } from "../platform/roomManager.js";
+import { finishMatch }   from "../platform/matchRecorder.js";
 
 const MOVE_TIMEOUT_MS = 15_000;
 const RESET_DELAY_MS  = 2_500;
@@ -260,6 +261,8 @@ export function handleTttEndMatch(io, socket, room) {
     totalRounds: match.round,
   });
 
+  finishMatch(room, { winnerSocketId: overallWinnerId, scores: match.scores, status: "completed" });
+
   room.state.ttt = null;
   console.log(`[ttt] match over — ${winnerName ?? "draw"} | ${match.round} rounds`);
 }
@@ -304,6 +307,8 @@ export function handleTttForfeit(io, room, disconnectedPlayerId) {
     totalRounds: match.round,
     reason:      "forfeit", // lets the result screen show a tailored message
   });
+
+  finishMatch(room, { winnerSocketId: winnerId, scores: match.scores, status: "abandoned" });
 
   // Null out state so any subsequent calls (beacon race) are no-ops.
   room.state.ttt = null;

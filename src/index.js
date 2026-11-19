@@ -225,6 +225,15 @@ function startGame(room, config = {}) {
 function launchMatch(room, config = {}) {
   const players = getPlayerList(room);
 
+  // Snapshot participants (socket id → persistent userId) at match start, so the
+  // match can be recorded even if a player disconnects before it ends.
+  room.participants = room.players.map((p) => ({
+    socketId:    p.id,
+    userId:      p.data?.userId ?? null,
+    name:        p.data?.name ?? "Anonymous",
+    avatarColor: p.data?.avatarColor ?? "amber",
+  }));
+
   room.players.forEach((player) => {
     player.emit("match_found", {
       roomId:     room.id,

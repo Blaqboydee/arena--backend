@@ -16,6 +16,7 @@
  */
 
 import { getPlayerList } from "../platform/roomManager.js";
+import { finishMatch }   from "../platform/matchRecorder.js";
 
 const BOMB_TIME_MS     = 120_000;
 const MODULE_COUNT     = 3;
@@ -417,6 +418,8 @@ function defuse(io, room) {
     players,
   });
 
+  finishMatch(room, { coopResult: "win", status: "completed" });
+
   room.state.bomb = null;
   console.log(`[bomb] defused! ${elapsed}ms, ${bomb.strikes} strikes`);
 }
@@ -439,6 +442,8 @@ function explode(io, room) {
     strikes:   bomb.strikes,
     players,
   });
+
+  finishMatch(room, { coopResult: "loss", status: "completed" });
 
   room.state.bomb = null;
   console.log(`[bomb] exploded! reason: ${reason}`);

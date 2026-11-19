@@ -12,6 +12,7 @@
  */
 
 import { getPlayerList } from "../platform/roomManager.js";
+import { finishMatch }   from "../platform/matchRecorder.js";
 
 const START_DELAY_MS   = 1_500;
 const FLIP_TIMEOUT_MS  = 10_000;
@@ -341,6 +342,8 @@ export function handleMemEndMatch(io, socket, room) {
     totalRounds: match.round,
   });
 
+  finishMatch(room, { winnerSocketId: overallWinnerId, scores: match.scores, status: "completed" });
+
   room.state.mem = null;
   console.log(`[mem] match over — ${winnerName ?? "draw"}`);
 }
@@ -366,6 +369,8 @@ export function handleMemForfeit(io, room, disconnectedPlayerId) {
     forfeit:     true,
     forfeitedBy: loser?.name ?? "Opponent",
   });
+
+  finishMatch(room, { winnerSocketId: winner?.id ?? null, scores: match.scores, status: "abandoned" });
 
   room.state.mem = null;
   console.log(`[mem] forfeit — ${disconnectedPlayerId} left`);

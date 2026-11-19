@@ -20,6 +20,7 @@
  */
 
 import { getPlayerList } from "../platform/roomManager.js";
+import { finishMatch }   from "../platform/matchRecorder.js";
 
 const PICK_TIMEOUT_MS  = 45_000;
 const GUESS_TIMEOUT_MS = 25_000;
@@ -417,6 +418,8 @@ export function handleHmEndMatch(io, socket, room) {
     totalRounds: match.round,
   });
 
+  finishMatch(room, { winnerSocketId: overallWinnerId, scores: match.scores, status: "completed" });
+
   room.state.hm = null;
   console.log(`[hm] match over — ${winnerName ?? "draw"} | ${match.round} rounds`);
 }
@@ -453,6 +456,8 @@ export function handleHmForfeit(io, room, disconnectedPlayerId) {
     totalRounds: match.round,
     reason:      "forfeit",
   });
+
+  finishMatch(room, { winnerSocketId: winnerId, scores: match.scores, status: "abandoned" });
 
   room.state.hm = null;
 }

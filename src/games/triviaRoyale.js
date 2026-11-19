@@ -14,6 +14,7 @@
  */
 
 import { getPlayerList } from "../platform/roomManager.js";
+import { finishMatch }   from "../platform/matchRecorder.js";
 
 const QUESTION_TIME_MS = 15_000;
 const REVEAL_DELAY_MS  = 5_000;
@@ -340,6 +341,8 @@ function endMatch(io, room) {
     leaderboard,
     totalQuestions: triv.questions.length,
   });
+
+  finishMatch(room, { winnerSocketId: winnerId, scores: triv.scores, status: "completed" });
 
   room.state.triv = null;
   console.log(`[triv] match over — winner: ${winnerName}`);
