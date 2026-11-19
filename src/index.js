@@ -15,6 +15,7 @@ import { resolveOrCreateUser, updateProfile }    from "./platform/identityManage
 import { setupRedisAdapter }                      from "./platform/scaling.js";
 import { flushPendingMatches }                    from "./platform/matchRecorder.js";
 import { prisma }                                 from "./db.js";
+import statsRoutes                                 from "./api/statsRoutes.js";
 
 // Game engines
 import { startReactionGame, handleClick,
@@ -116,6 +117,9 @@ app.use(express.json());
 // Clients hit this on app load so Render's cold-start clock begins before the
 // user even navigates to the lobby.  Must stay above the socket.io setup.
 app.get("/ping", (_req, res) => res.sendStatus(200));
+
+// ── Stats API (leaderboards, profiles) ────────────────────────────────────────
+app.use("/api", statsRoutes);
 
 const server = http.createServer(app);
 

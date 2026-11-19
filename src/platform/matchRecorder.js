@@ -55,22 +55,56 @@ export async function finishMatch(room, { winnerSocketId = null, scores = {}, st
     return status === "abandoned" ? "forfeit" : "loss";
   };
 
-  const write = prisma.match.create({
-    data: {
-      gameType: room.gameType,
-      roomId:   room.id,
-      status,
-      endedAt:  new Date(),
-      winnerId: winner?.userId ?? null,
-      participants: {
-        create: participants.map((p) => ({
-          userId: p.userId,
-          score:  scores[p.socketId] ?? 0,
-          result: resultFor(p.socketId),
-        })),
+  // Map a match result to stat deltas (forfeit counts as a loss for the record).
+  const deltas = (result) => ({
+    w: result === "win"  ? 1 : 0,
+    d: result === "draw" ? 1 : 0,
+    l: result === "loss" || result === "forfeit" ? 1 : 0,
+  });
+
+  // One transaction: the Match + MatchParticipants, plus denormalized stat bumps
+  // on each User and their per-game UserGameStat — so the leaderboard stays a
+  // cheap ORDER BY and profiles read a single row.
+  const ops = [
+    prisma.match.create({
+      data: {
+        gameType: room.gameType,
+        roomId:   room.id,
+        status,
+        endedAt:  new Date(),
+        winnerId: winner?.userId ?? null,
+        participants: {
+          create: participants.map((p) => ({
+            userId: p.userId,
+            score:  scores[p.socketId] ?? 0,
+            result: resultFor(p.socketId),
+          })),
+        },
       },
-    },
-  })
+    }),
+  ];
+
+  for (const p of participants) {
+    const { w, d, l } = deltas(resultFor(p.socketId));
+    ops.push(
+      prisma.user.update({
+        where: { id: p.userId },
+        data: {
+          gamesPlayed: { increment: 1 },
+          wins:   { increment: w },
+          draws:  { increment: d },
+          losses: { increment: l },
+        },
+      }),
+      prisma.userGameStat.upsert({
+        where:  { userId_gameType: { userId: p.userId, gameType: room.gameType } },
+        create: { userId: p.userId, gameType: room.gameType, played: 1, wins: w, draws: d, losses: l },
+        update: { played: { increment: 1 }, wins: { increment: w }, draws: { increment: d }, losses: { increment: l } },
+      }),
+    );
+  }
+
+  const write = prisma.$transaction(ops)
     .then(() => console.log(`[match] recorded ${room.gameType} ${room.id} (${status}) — winner ${winner?.userId ?? "draw"}`))
     .catch((err) => console.error("[match] finishMatch failed:", err.message));
 

@@ -30,6 +30,13 @@ model User {
   avatarColor String   @default("amber")
   isGuest     Boolean  @default(true)
 
+  // Denormalized lifetime stats (incremented on each finished match) so the
+  // leaderboard is a simple fast ORDER BY instead of aggregating every match.
+  wins        Int @default(0)
+  losses      Int @default(0) // includes forfeits
+  draws       Int @default(0)
+  gamesPlayed Int @default(0)
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   lastSeenAt  DateTime @default(now())
@@ -37,8 +44,29 @@ model User {
   identities     Identity[]
   participations MatchParticipant[]
   wonMatches     Match[]            @relation("MatchWinner")
+  gameStats      UserGameStat[]
 
   @@index([lastSeenAt])
+  @@index([wins])
+}
+
+// Per-game breakdown of a player's record (powers per-game leaderboards and the
+// profile breakdown). One row per (user, gameType), upserted on each match.
+model UserGameStat {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameType String
+
+  wins   Int @default(0)
+  losses Int @default(0)
+  draws  Int @default(0)
+  played Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, gameType])
+  @@index([gameType, wins])
 }
 
 // External auth identities linked to a User (claimed accounts).
