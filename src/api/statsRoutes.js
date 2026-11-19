@@ -10,7 +10,7 @@ import { prisma, dbEnabled } from "../db.js";
 const router = Router();
 
 const PLAYER_SELECT = {
-  id: true, displayName: true, avatarColor: true,
+  id: true, displayName: true, avatarColor: true, avatar: true,
   wins: true, losses: true, draws: true, gamesPlayed: true,
 };
 
@@ -42,10 +42,10 @@ router.get("/leaderboard", async (req, res) => {
         where:   { gameType: game, played: { gt: 0 } },
         orderBy: [{ wins: "desc" }, { played: "asc" }],
         take:    limit,
-        include: { user: { select: { id: true, displayName: true, avatarColor: true } } },
+        include: { user: { select: { id: true, displayName: true, avatarColor: true, avatar: true } } },
       });
       players = rows.map((r) => withWinRate({
-        id: r.user.id, displayName: r.user.displayName, avatarColor: r.user.avatarColor,
+        id: r.user.id, displayName: r.user.displayName, avatarColor: r.user.avatarColor, avatar: r.user.avatar,
         wins: r.wins, losses: r.losses, draws: r.draws, gamesPlayed: r.played,
       }));
     }

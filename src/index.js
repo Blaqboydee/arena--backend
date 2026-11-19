@@ -279,22 +279,24 @@ io.on("connection", (socket) => {
       if (!identity) return;
       socket.data.userId = identity.userId;
       // Prime defaults ONLY if set_session hasn't already set a live choice —
-      // never clobber the name/color the player just picked.
+      // never clobber the name/color/avatar the player just picked.
       if (!socket.data.name)        socket.data.name        = identity.name;
       if (!socket.data.avatarColor) socket.data.avatarColor = identity.avatarColor;
+      if (socket.data.avatar === undefined) socket.data.avatar = identity.avatar;
       socket.emit("identity", {
         userId:      identity.userId,
         token:       identity.token,
         name:        identity.name,
         avatarColor: identity.avatarColor,
+        avatar:      identity.avatar,
       });
     })
     .catch((err) => console.error("[identity] resolve failed:", err.message));
 
   // ── 1. Identity ─────────────────────────────────────────────────────────────
-  socket.on("set_session", async ({ name, avatarColor }) => {
-    setSession(socket, { name, avatarColor });
-    const profile = getSession(socket);                // sanitised name/color
+  socket.on("set_session", async ({ name, avatarColor, avatar }) => {
+    setSession(socket, { name, avatarColor, avatar });
+    const profile = getSession(socket);                // sanitised name/color/avatar
     await socket.data.identityReady;                   // ensure userId is resolved
     await updateProfile(socket.data.userId, profile);  // no-ops if not persisted
     console.log(`[session] ${socket.id} → ${profile.name} (${profile.avatarColor})`);

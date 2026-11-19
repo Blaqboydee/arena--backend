@@ -11,11 +11,14 @@ const DEFAULT_COLOR = "amber";
  * We use socket.data so it's scoped to the socket and
  * automatically cleaned up on disconnect.
  */
-export function setSession(socket, { name, avatarColor }) {
+export function setSession(socket, { name, avatarColor, avatar }) {
   socket.data.name        = typeof name === "string" && name.trim()
     ? name.trim().slice(0, 20)
     : "Anonymous";
   socket.data.avatarColor = avatarColor || DEFAULT_COLOR;
+  if (avatar !== undefined) {
+    socket.data.avatar = typeof avatar === "string" ? avatar.slice(0, 40) : "";
+  }
 }
 
 /**
@@ -27,5 +30,6 @@ export function getSession(socket) {
     id:          socket.id,
     name:        socket.data.name        || "Anonymous",
     avatarColor: socket.data.avatarColor || DEFAULT_COLOR,
+    avatar:      socket.data.avatar       || "",
   };
 }

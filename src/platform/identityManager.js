@@ -25,6 +25,7 @@ function toIdentity(user, token) {
     token,
     name:        user.displayName,
     avatarColor: user.avatarColor,
+    avatar:      user.avatar ?? "",
   };
 }
 
@@ -63,13 +64,18 @@ export async function resolveOrCreateUser(token) {
  * @param {string|undefined} userId
  * @param {{name:string, avatarColor:string}} profile
  */
-export async function updateProfile(userId, { name, avatarColor }) {
+export async function updateProfile(userId, { name, avatarColor, avatar }) {
   if (!dbEnabled || !prisma || !userId) return;
 
   try {
     await prisma.user.update({
       where: { id: userId },
-      data:  { displayName: name, avatarColor, lastSeenAt: new Date() },
+      data:  {
+        displayName: name,
+        avatarColor,
+        ...(avatar !== undefined ? { avatar } : {}),
+        lastSeenAt: new Date(),
+      },
     });
   } catch (err) {
     console.error("[identity] updateProfile failed:", err.message);

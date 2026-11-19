@@ -28,6 +28,7 @@ model User {
   guestToken  String?  @unique
   displayName String   @default("Anonymous")
   avatarColor String   @default("amber")
+  avatar      String   @default("") // boring-avatars seed; "" = seed off displayName
   isGuest     Boolean  @default(true)
 
   // Denormalized lifetime stats (incremented on each finished match) so the
