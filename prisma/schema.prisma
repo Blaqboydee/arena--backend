@@ -75,11 +75,18 @@ model UserGameStat {
 // External auth identities linked to a User (claimed accounts).
 model Identity {
   id         String   @id @default(cuid())
-  provider   String // "google" | "email" | ...
-  providerId String // external subject id / email
+  provider   String // "password" | "google" | "email" | ...
+  providerId String // login handle (username, lower-cased) / external subject id
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
+
+  // Set for provider = "password": scrypt hashes + the display-cased handle.
+  // Null for external providers (Google/email) that carry no local secret.
+  label        String? // username as the player typed it (for display)
+  secret       String? // scrypt hash of the password
+  recoveryHash String? // scrypt hash of the one-time recovery code
+
+  createdAt DateTime @default(now())
 
   @@unique([provider, providerId])
   @@index([userId])

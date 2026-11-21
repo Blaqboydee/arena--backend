@@ -20,14 +20,22 @@ function newGuestToken() {
 }
 
 function toIdentity(user, token) {
+  // A claimed account has a "password" Identity row; surface it so the client
+  // can show "saved as @handle" instead of the "save your account" prompt.
+  const pw = (user.identities ?? []).find((i) => i.provider === "password");
   return {
     userId:      user.id,
     token,
     name:        user.displayName,
     avatarColor: user.avatarColor,
     avatar:      user.avatar ?? "",
+    claimed:     Boolean(pw),
+    username:    pw?.label ?? null,
   };
 }
+
+// Only the fields toIdentity needs — keeps the per-connect query lean.
+const IDENTITY_INCLUDE = { identities: { where: { provider: "password" } } };
 
 /**
  * Resolve a guest User from a token, or create a fresh one.
@@ -39,7 +47,10 @@ export async function resolveOrCreateUser(token) {
 
   try {
     if (token) {
-      const existing = await prisma.user.findUnique({ where: { guestToken: token } });
+      const existing = await prisma.user.findUnique({
+        where:   { guestToken: token },
+        include: IDENTITY_INCLUDE,
+      });
       if (existing) {
         await prisma.user.update({
           where: { id: existing.id },

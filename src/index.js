@@ -12,6 +12,8 @@ import { createRoom, joinByInvite, getRoom,
 import { enqueue, dequeue,
          getQueueCounts, broadcastCounts }       from "./platform/lobbyManager.js";
 import { resolveOrCreateUser, updateProfile }    from "./platform/identityManager.js";
+import { claimAccount, restoreAccount,
+         tooManyAttempts }                        from "./platform/accountManager.js";
 import { setupRedisAdapter }                      from "./platform/scaling.js";
 import { flushPendingMatches }                    from "./platform/matchRecorder.js";
 import { prisma }                                 from "./db.js";
@@ -302,6 +304,46 @@ io.on("connection", (socket) => {
     await socket.data.identityReady;                   // ensure userId is resolved
     await updateProfile(socket.data.userId, profile);  // no-ops if not persisted
     console.log(`[session] ${socket.id} → ${profile.name} (${profile.avatarColor})`);
+  });
+
+  // ── 1a. Account claiming / restore ────────────────────────────────────────────
+  // Claim: attach a username+password to THIS device's guest User so its rank,
+  // ELO and history become recoverable anywhere. Restore: log in on a new device
+  // and adopt that User (the client persists the returned guest token).
+
+  socket.on("claim_account", async ({ username, password } = {}, ack) => {
+    await socket.data.identityReady;
+    const result = await claimAccount(socket.data.userId, username, password);
+    if (result.ok) {
+      // Re-broadcast identity so the client flips to the "saved" state.
+      socket.emit("identity", {
+        userId:      socket.data.userId,
+        name:        socket.data.name,
+        avatarColor: socket.data.avatarColor,
+        avatar:      socket.data.avatar,
+        claimed:     true,
+        username:    result.username,
+      });
+    }
+    if (typeof ack === "function") ack(result);
+  });
+
+  socket.on("restore_account", async ({ username, password } = {}, ack) => {
+    if (tooManyAttempts(socket.id)) {
+      if (typeof ack === "function") ack({ ok: false, error: "Too many attempts. Wait a minute and try again." });
+      return;
+    }
+    const result = await restoreAccount(username, password);
+    if (result.ok && result.identity) {
+      // Rebind this live socket to the restored User and hand the client its
+      // durable token + profile via the usual identity event.
+      socket.data.userId      = result.identity.userId;
+      socket.data.name        = result.identity.name;
+      socket.data.avatarColor = result.identity.avatarColor;
+      socket.data.avatar      = result.identity.avatar;
+      socket.emit("identity", result.identity);
+    }
+    if (typeof ack === "function") ack(result);
   });
 
   // ── 2. Lobby ────────────────────────────────────────────────────────────────
