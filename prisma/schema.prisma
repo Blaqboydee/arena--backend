@@ -39,6 +39,11 @@ model User {
   gamesPlayed Int @default(0)
   rating      Int @default(1000) // ELO; only 1v1 competitive games move it
 
+  // Daily Challenge streak: consecutive UTC days the player finished the daily.
+  dailyStreak   Int     @default(0)
+  bestStreak    Int     @default(0)
+  lastDailyDate String? // "YYYY-MM-DD" of the last finished daily (UTC)
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   lastSeenAt  DateTime @default(now())
@@ -47,10 +52,36 @@ model User {
   participations MatchParticipant[]
   wonMatches     Match[]            @relation("MatchWinner")
   gameStats      UserGameStat[]
+  dailyResults   DailyResult[]
 
   @@index([lastSeenAt])
   @@index([wins])
   @@index([rating])
+}
+
+// One player's attempt at a given day's Daily Challenge. One row per (user, day);
+// server-authoritative (the answer and per-guess grades live here), so the daily
+// leaderboard is trustworthy. `guesses` is [{ word, grade[] }].
+model DailyResult {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date     String // "YYYY-MM-DD" (UTC)
+  gameType String @default("wordle")
+
+  answer   String
+  guesses  Json    @default("[]")
+  attempts Int     @default(0)
+  solved   Boolean @default(false)
+  finished Boolean @default(false)
+  score    Int     @default(0)
+  timeMs   Int     @default(0)
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@unique([userId, date])
+  @@index([date, score])
 }
 
 // Per-game breakdown of a player's record (powers per-game leaderboards and the

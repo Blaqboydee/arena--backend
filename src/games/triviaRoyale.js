@@ -15,57 +15,22 @@
 
 import { getPlayerList } from "../platform/roomManager.js";
 import { finishMatch }   from "../platform/matchRecorder.js";
+import { questionsForPack, randomMix } from "./triviaQuestions.js";
 
 const QUESTION_TIME_MS = 15_000;
 const REVEAL_DELAY_MS  = 5_000;
 const START_DELAY_MS   = 2_000;
-const TOTAL_QUESTIONS  = 10;
+const TOTAL_QUESTIONS  = 10;        // default round length
+const MIN_QUESTIONS    = 5;
+const MAX_QUESTIONS    = 20;
 
-// ── Question bank ─────────────────────────────────────────────────────────────
-// cat: "science" | "geography" | "culture"
+// Clamp a host-chosen question count to a sane range (falls back to the default).
+function resolveCount(raw) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return TOTAL_QUESTIONS;
+  return Math.min(MAX_QUESTIONS, Math.max(MIN_QUESTIONS, Math.round(n)));
+}
 
-const QUESTIONS = [
-  { q: "What planet is known as the Red Planet?", options: ["Venus", "Mars", "Jupiter", "Saturn"], answer: 1, cat: "science" },
-  { q: "What is the chemical symbol for gold?", options: ["Ag", "Fe", "Au", "Cu"], answer: 2, cat: "science" },
-  { q: "How many bones are in the adult human body?", options: ["186", "206", "226", "246"], answer: 1, cat: "science" },
-  { q: "Which country has the most natural lakes?", options: ["USA", "Russia", "Canada", "Brazil"], answer: 2, cat: "geography" },
-  { q: "What year did the Berlin Wall fall?", options: ["1987", "1989", "1991", "1993"], answer: 1, cat: "culture" },
-  { q: "What is the smallest prime number?", options: ["0", "1", "2", "3"], answer: 2, cat: "science" },
-  { q: "Which element has the atomic number 1?", options: ["Helium", "Hydrogen", "Lithium", "Carbon"], answer: 1, cat: "science" },
-  { q: "What is the largest ocean on Earth?", options: ["Atlantic", "Indian", "Pacific", "Arctic"], answer: 2, cat: "geography" },
-  { q: "Who painted the Mona Lisa?", options: ["Michelangelo", "Da Vinci", "Raphael", "Donatello"], answer: 1, cat: "culture" },
-  { q: "What is the speed of light in km/s (approx)?", options: ["150,000", "300,000", "450,000", "600,000"], answer: 1, cat: "science" },
-  { q: "What gas do plants absorb from the atmosphere?", options: ["Oxygen", "Carbon Dioxide", "Nitrogen", "Hydrogen"], answer: 1, cat: "science" },
-  { q: "In what year did World War I begin?", options: ["1912", "1914", "1916", "1918"], answer: 1, cat: "culture" },
-  { q: "What is the hardest natural substance?", options: ["Gold", "Iron", "Diamond", "Platinum"], answer: 2, cat: "science" },
-  { q: "How many continents are there?", options: ["5", "6", "7", "8"], answer: 2, cat: "geography" },
-  { q: "Which planet has the most moons?", options: ["Jupiter", "Saturn", "Uranus", "Neptune"], answer: 1, cat: "science" },
-  { q: "What is the boiling point of water in Celsius?", options: ["90°C", "100°C", "110°C", "120°C"], answer: 1, cat: "science" },
-  { q: "Who wrote 'Romeo and Juliet'?", options: ["Dickens", "Shakespeare", "Austen", "Hemingway"], answer: 1, cat: "culture" },
-  { q: "What is the currency of Japan?", options: ["Yuan", "Won", "Yen", "Peso"], answer: 2, cat: "geography" },
-  { q: "Which organ pumps blood through the body?", options: ["Brain", "Heart", "Lungs", "Liver"], answer: 1, cat: "science" },
-  { q: "How many sides does a hexagon have?", options: ["5", "6", "7", "8"], answer: 1, cat: "science" },
-  { q: "What is the tallest mountain in the world?", options: ["K2", "Everest", "Kangchenjunga", "Lhotse"], answer: 1, cat: "geography" },
-  { q: "What does DNA stand for?", options: ["Deoxyribonucleic Acid", "Dinitrogen Acid", "Dynamic Neural Array", "Dense Nucleic Acid"], answer: 0, cat: "science" },
-  { q: "Which country invented pizza?", options: ["Greece", "Italy", "France", "Spain"], answer: 1, cat: "culture" },
-  { q: "How many teeth does an adult human have?", options: ["28", "30", "32", "34"], answer: 2, cat: "science" },
-  { q: "What color is a ruby?", options: ["Blue", "Green", "Red", "Yellow"], answer: 2, cat: "culture" },
-  { q: "Which is the longest river in the world?", options: ["Amazon", "Nile", "Mississippi", "Yangtze"], answer: 1, cat: "geography" },
-  { q: "What does HTTP stand for?", options: ["HyperText Transfer Protocol", "High Tech Transfer Program", "Hyper Transfer Text Protocol", "Home Tool Transfer Protocol"], answer: 0, cat: "culture" },
-  { q: "What is the main language spoken in Brazil?", options: ["Spanish", "Portuguese", "French", "English"], answer: 1, cat: "geography" },
-  { q: "How many strings does a standard guitar have?", options: ["4", "5", "6", "7"], answer: 2, cat: "culture" },
-  { q: "What creature is known as 'man's best friend'?", options: ["Cat", "Dog", "Horse", "Parrot"], answer: 1, cat: "culture" },
-  { q: "What is the square root of 144?", options: ["10", "11", "12", "13"], answer: 2, cat: "science" },
-  { q: "Which gas makes up most of Earth's atmosphere?", options: ["Oxygen", "Carbon Dioxide", "Nitrogen", "Argon"], answer: 2, cat: "science" },
-  { q: "What is the capital of Australia?", options: ["Sydney", "Melbourne", "Canberra", "Perth"], answer: 2, cat: "geography" },
-  { q: "How many minutes are in a day?", options: ["1240", "1340", "1440", "1540"], answer: 2, cat: "science" },
-  { q: "What vitamin does the sun provide?", options: ["A", "B", "C", "D"], answer: 3, cat: "science" },
-  { q: "Which animal can fly backwards?", options: ["Eagle", "Hummingbird", "Bat", "Parrot"], answer: 1, cat: "science" },
-  { q: "What is the largest organ in the human body?", options: ["Liver", "Brain", "Skin", "Heart"], answer: 2, cat: "science" },
-  { q: "Which country has the largest population?", options: ["USA", "India", "China", "Indonesia"], answer: 1, cat: "geography" },
-  { q: "How many zeros are in a million?", options: ["5", "6", "7", "8"], answer: 1, cat: "science" },
-  { q: "What year was the first iPhone released?", options: ["2005", "2006", "2007", "2008"], answer: 2, cat: "culture" },
-];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -79,30 +44,6 @@ function clearTimer(room) {
     clearTimeout(timer);
     room.state.triv.currentTimer = null;
   }
-}
-
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function pickQuestions(count) {
-  return shuffle(QUESTIONS).slice(0, count);
-}
-
-/**
- * Pick up to `count` questions from a category.
- * If the category has fewer than `count`, supplement with random questions
- * from the rest of the bank so the total reaches `count`.
- */
-function pickFromPack(pack, count) {
-  const inPack  = shuffle(QUESTIONS.filter((q) => q.cat === pack));
-  const outside = shuffle(QUESTIONS.filter((q) => q.cat !== pack));
-  return [...inPack, ...outside].slice(0, count);
 }
 
 /**
@@ -142,15 +83,16 @@ function calcScore(answerTime) {
 
 export function startTriviaRoyale(io, room, questionConfig) {
   let questions;
+  const count = resolveCount(questionConfig?.count);
 
   if (questionConfig?.mode === "custom" && Array.isArray(questionConfig.questions)) {
     const validated = validateCustomQuestions(questionConfig.questions);
     // If validation fails fall back to random so bad input can't crash the match
-    questions = validated ?? pickQuestions(TOTAL_QUESTIONS);
+    questions = validated ?? randomMix(count);
   } else if (questionConfig?.mode === "pack" && questionConfig.pack) {
-    questions = pickFromPack(questionConfig.pack, TOTAL_QUESTIONS);
+    questions = questionsForPack(questionConfig.pack, count);
   } else {
-    questions = pickQuestions(TOTAL_QUESTIONS);
+    questions = randomMix(count);
   }
 
   room.state.triv = {

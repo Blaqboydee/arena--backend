@@ -18,6 +18,8 @@ import { setupRedisAdapter }                      from "./platform/scaling.js";
 import { flushPendingMatches }                    from "./platform/matchRecorder.js";
 import { prisma }                                 from "./db.js";
 import statsRoutes                                 from "./api/statsRoutes.js";
+import dailyRoutes                                 from "./api/dailyRoutes.js";
+import triviaRoutes                                from "./api/triviaRoutes.js";
 
 // Game engines
 import { startReactionGame, handleClick,
@@ -124,6 +126,12 @@ app.get("/ping", (_req, res) => res.sendStatus(200));
 
 // ── Stats API (leaderboards, profiles) ────────────────────────────────────────
 app.use("/api", statsRoutes);
+
+// ── Daily Challenge API ───────────────────────────────────────────────────────
+app.use("/api/daily", dailyRoutes);
+
+// ── Trivia pack metadata API ──────────────────────────────────────────────────
+app.use("/api/trivia", triviaRoutes);
 
 const server = http.createServer(app);
 
