@@ -69,6 +69,76 @@ const GENERAL = [
   { q: "What do caterpillars turn into?", options: ["Butterflies", "Beetles", "Spiders", "Bees"], answer: 0 },
   { q: "Which country is shaped like a boot?", options: ["Spain", "Italy", "Greece", "Portugal"], answer: 1 },
   { q: "How many months have exactly 31 days?", options: ["5", "6", "7", "8"], answer: 2 },
+  { q: "What is the capital of France?", options: ["Paris", "Lyon", "Marseille", "Nice"], answer: 0 },
+  { q: "Which country has the largest land area in Africa?", options: ["Nigeria", "Algeria", "Egypt", "Sudan"], answer: 1 },
+  { q: "Off the coast of which country is the Great Barrier Reef?", options: ["Brazil", "Australia", "Mexico", "India"], answer: 1 },
+  { q: "Mount Kilimanjaro is located in which country?", options: ["Kenya", "Tanzania", "Uganda", "Ethiopia"], answer: 1 },
+  { q: "What is the largest hot desert in the world?", options: ["Gobi", "Kalahari", "Sahara", "Arabian"], answer: 2 },
+  { q: "The Nile River empties into which sea?", options: ["Red Sea", "Mediterranean Sea", "Arabian Sea", "Black Sea"], answer: 1 },
+  { q: "Which is the smallest continent?", options: ["Europe", "Antarctica", "Australia", "South America"], answer: 2 },
+  { q: "What is the capital of Egypt?", options: ["Cairo", "Alexandria", "Giza", "Luxor"], answer: 0 },
+  { q: "Which city is split between Europe and Asia?", options: ["Istanbul", "Moscow", "Athens", "Cairo"], answer: 0 },
+  { q: "The Amazon rainforest is mostly located in which country?", options: ["Peru", "Colombia", "Brazil", "Venezuela"], answer: 2 },
+  { q: "What is the capital of Germany?", options: ["Munich", "Hamburg", "Berlin", "Frankfurt"], answer: 2 },
+  { q: "Which ocean lies between Africa and Australia?", options: ["Atlantic", "Pacific", "Indian", "Arctic"], answer: 2 },
+  { q: "Mount Everest sits on the border of Nepal and which country?", options: ["India", "China", "Bhutan", "Pakistan"], answer: 1 },
+  { q: "What is the capital of Nigeria?", options: ["Lagos", "Abuja", "Kano", "Ibadan"], answer: 1 },
+  { q: "Which country is famous for tulips and windmills?", options: ["Belgium", "Netherlands", "Denmark", "Sweden"], answer: 1 },
+  { q: "Who was the first President of the United States?", options: ["Abraham Lincoln", "George Washington", "Thomas Jefferson", "John Adams"], answer: 1 },
+  { q: "In which year did World War II end?", options: ["1943", "1945", "1947", "1950"], answer: 1 },
+  { q: "Which Egyptian queen was linked to Julius Caesar and Mark Antony?", options: ["Nefertiti", "Cleopatra", "Hatshepsut", "Isis"], answer: 1 },
+  { q: "The Titanic sank in which year?", options: ["1905", "1912", "1918", "1923"], answer: 1 },
+  { q: "Who reached the Americas in 1492?", options: ["Vasco da Gama", "Christopher Columbus", "Ferdinand Magellan", "Marco Polo"], answer: 1 },
+  { q: "Who was the UK Prime Minister nicknamed the 'Iron Lady'?", options: ["Theresa May", "Margaret Thatcher", "Queen Elizabeth", "Angela Merkel"], answer: 1 },
+  { q: "The ancient Colosseum is located in which city?", options: ["Athens", "Rome", "Cairo", "Istanbul"], answer: 1 },
+  { q: "Who led India to independence through non-violent protest?", options: ["Nehru", "Gandhi", "Bose", "Patel"], answer: 1 },
+  { q: "Who was the first person to walk on the Moon?", options: ["Buzz Aldrin", "Yuri Gagarin", "Neil Armstrong", "Michael Collins"], answer: 2 },
+  { q: "What is the centre of an atom called?", options: ["Electron", "Nucleus", "Proton", "Neutron"], answer: 1 },
+  { q: "Which blood type is the universal donor?", options: ["A", "B", "O negative", "AB"], answer: 2 },
+  { q: "What is often called the 'powerhouse of the cell'?", options: ["Nucleus", "Mitochondria", "Ribosome", "Membrane"], answer: 1 },
+  { q: "How many bones does a shark have?", options: ["0", "50", "100", "206"], answer: 0 },
+  { q: "What is the most abundant element in the universe?", options: ["Oxygen", "Helium", "Hydrogen", "Nitrogen"], answer: 2 },
+  { q: "Which planet is famous for its prominent ring system?", options: ["Mars", "Saturn", "Venus", "Mercury"], answer: 1 },
+  { q: "What do you call animals that eat only plants?", options: ["Carnivores", "Herbivores", "Omnivores", "Insectivores"], answer: 1 },
+  { q: "The scientific study of weather is called:", options: ["Geology", "Meteorology", "Astronomy", "Biology"], answer: 1 },
+  { q: "Which metal is the best conductor of electricity?", options: ["Gold", "Copper", "Silver", "Iron"], answer: 2 },
+  { q: "Which part of a plant carries out most photosynthesis?", options: ["Roots", "Leaves", "Stem", "Flowers"], answer: 1 },
+  { q: "What is the largest living reptile?", options: ["Python", "Saltwater Crocodile", "Komodo Dragon", "Anaconda"], answer: 1 },
+  { q: "How many rings are on the Olympic flag?", options: ["3", "4", "5", "6"], answer: 2 },
+  { q: "In which sport would you perform a 'slam dunk'?", options: ["Football", "Basketball", "Tennis", "Golf"], answer: 1 },
+  { q: "The FIFA World Cup is held every how many years?", options: ["2", "3", "4", "5"], answer: 2 },
+  { q: "In tennis, what is a score of zero called?", options: ["Nil", "Love", "Duck", "Blank"], answer: 1 },
+  { q: "Which country has won the most FIFA World Cups?", options: ["Germany", "Brazil", "Italy", "Argentina"], answer: 1 },
+  { q: "In which sport is the term 'birdie' used?", options: ["Golf", "Cricket", "Boxing", "Swimming"], answer: 0 },
+  { q: "How many points is a touchdown worth in American football?", options: ["3", "6", "7", "10"], answer: 1 },
+  { q: "Who wrote the Harry Potter book series?", options: ["J.R.R. Tolkien", "J.K. Rowling", "Roald Dahl", "C.S. Lewis"], answer: 1 },
+  { q: "In the fairy tale, who climbed a giant beanstalk?", options: ["Hansel", "Jack", "Peter", "Jim"], answer: 1 },
+  { q: "Who composed the famous 'Fifth Symphony'?", options: ["Mozart", "Beethoven", "Bach", "Chopin"], answer: 1 },
+  { q: "What nationality was the painter Pablo Picasso?", options: ["Italian", "Spanish", "French", "Dutch"], answer: 1 },
+  { q: "In Greek mythology, who is the king of the gods?", options: ["Zeus", "Poseidon", "Hades", "Apollo"], answer: 0 },
+  { q: "Which fruit is said to 'keep the doctor away'?", options: ["Banana", "Apple", "Orange", "Grape"], answer: 1 },
+  { q: "What is the main ingredient in bread?", options: ["Flour", "Sugar", "Rice", "Corn"], answer: 0 },
+  { q: "Sushi originates from which country?", options: ["China", "Japan", "Korea", "Thailand"], answer: 1 },
+  { q: "Which spice is the most expensive by weight?", options: ["Pepper", "Saffron", "Cinnamon", "Vanilla"], answer: 1 },
+  { q: "What kind of animal is a Komodo dragon?", options: ["Snake", "Lizard", "Fish", "Bird"], answer: 1 },
+  { q: "How many legs does an insect have?", options: ["4", "6", "8", "10"], answer: 1 },
+  { q: "What is a group of lions called?", options: ["Pack", "Herd", "Pride", "Flock"], answer: 2 },
+  { q: "Which bird is a traditional symbol of peace?", options: ["Eagle", "Dove", "Owl", "Crow"], answer: 1 },
+  { q: "What is the fastest bird in the world?", options: ["Eagle", "Peregrine Falcon", "Ostrich", "Hawk"], answer: 1 },
+  { q: "What is the largest species of penguin?", options: ["King", "Emperor", "Gentoo", "Rockhopper"], answer: 1 },
+  { q: "How many letters are in the English alphabet?", options: ["24", "25", "26", "27"], answer: 2 },
+  { q: "What is the Roman numeral for 50?", options: ["L", "C", "D", "X"], answer: 0 },
+  { q: "On which planet do humans live?", options: ["Mars", "Venus", "Earth", "Jupiter"], answer: 2 },
+  { q: "How many sides does a pentagon have?", options: ["4", "5", "6", "7"], answer: 1 },
+  { q: "What is 9 squared (9 × 9)?", options: ["18", "72", "81", "99"], answer: 2 },
+  { q: "How many hours are there in two days?", options: ["24", "36", "48", "60"], answer: 2 },
+  { q: "What colour are emeralds?", options: ["Red", "Blue", "Green", "Yellow"], answer: 2 },
+  { q: "Which weighs more: a kilogram of feathers or a kilogram of steel?", options: ["Feathers", "Steel", "They weigh the same", "It depends"], answer: 2 },
+  { q: "What is the capital of Spain?", options: ["Barcelona", "Madrid", "Seville", "Valencia"], answer: 1 },
+  { q: "Which planet is the hottest in our solar system?", options: ["Mercury", "Venus", "Mars", "Jupiter"], answer: 1 },
+  { q: "What do bees live in?", options: ["Nest", "Hive", "Den", "Burrow"], answer: 1 },
+  { q: "Which country is home to the Great Wall?", options: ["Japan", "China", "India", "Mongolia"], answer: 1 },
+  { q: "What is the hardest working muscle in the human body?", options: ["Biceps", "Heart", "Tongue", "Jaw"], answer: 1 },
 ];
 
 // ── Tech & Digital (design, code, marketing, security, trends) ─────────────────
@@ -198,4 +268,37 @@ export function questionsForPack(id, count) {
 /** `count` random questions across every pack. */
 export function randomMix(count) {
   return shuffle(ALL).slice(0, count);
+}
+
+/**
+ * Draw `count` questions avoiding anything in `used` (a Set of question texts
+ * carried on the room, so back-to-back rounds don't repeat). When the eligible
+ * pool is exhausted, `used` resets and a fresh cycle begins. Mutates `used`.
+ *
+ * @param {string|null} packId  pack id, or null/"random" for the whole bank
+ * @param {number} count
+ * @param {Set<string>} used    question texts already asked this session
+ */
+export function drawQuestions(packId, count, used) {
+  const pack = packId && packId !== "random" ? PACKS.find((p) => p.id === packId) : null;
+  const pool = pack ? pack.questions : ALL;
+
+  let eligible = pool.filter((q) => !used.has(q.q));
+  if (eligible.length < count) {
+    // Exhausted this pack's fresh questions — start the cycle over.
+    used.clear();
+    eligible = pool;
+  }
+
+  const picked = shuffle(eligible).slice(0, count);
+
+  // Top up a small pack from the rest of the bank if it still can't fill a round.
+  if (picked.length < count) {
+    const have = new Set(picked.map((q) => q.q));
+    const extra = shuffle(ALL.filter((q) => !have.has(q.q))).slice(0, count - picked.length);
+    picked.push(...extra);
+  }
+
+  picked.forEach((q) => used.add(q.q));
+  return picked;
 }

@@ -15,7 +15,7 @@
 
 import { getPlayerList } from "../platform/roomManager.js";
 import { finishMatch }   from "../platform/matchRecorder.js";
-import { questionsForPack, randomMix } from "./triviaQuestions.js";
+import { drawQuestions } from "./triviaQuestions.js";
 
 const QUESTION_TIME_MS = 15_000;
 const REVEAL_DELAY_MS  = 5_000;
@@ -85,14 +85,19 @@ export function startTriviaRoyale(io, room, questionConfig) {
   let questions;
   const count = resolveCount(questionConfig?.count);
 
+  // Per-room memory of questions asked this session, so replaying the same pack
+  // in the same room serves fresh questions until the pool is exhausted. Lives on
+  // the room (not room.state.triv, which is cleared after each match).
+  room.trivAsked ??= new Set();
+
   if (questionConfig?.mode === "custom" && Array.isArray(questionConfig.questions)) {
     const validated = validateCustomQuestions(questionConfig.questions);
     // If validation fails fall back to random so bad input can't crash the match
-    questions = validated ?? randomMix(count);
+    questions = validated ?? drawQuestions("random", count, room.trivAsked);
   } else if (questionConfig?.mode === "pack" && questionConfig.pack) {
-    questions = questionsForPack(questionConfig.pack, count);
+    questions = drawQuestions(questionConfig.pack, count, room.trivAsked);
   } else {
-    questions = randomMix(count);
+    questions = drawQuestions("random", count, room.trivAsked);
   }
 
   room.state.triv = {
