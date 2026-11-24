@@ -53,6 +53,7 @@ model User {
   wonMatches     Match[]            @relation("MatchWinner")
   gameStats      UserGameStat[]
   dailyResults   DailyResult[]
+  soloScores     SoloScore[]
 
   @@index([lastSeenAt])
   @@index([wins])
@@ -82,6 +83,27 @@ model DailyResult {
 
   @@unique([userId, date])
   @@index([date, score])
+}
+
+// A player's best solo score for a given game (e.g. solo Trivia). One row per
+// (user, gameType), updated only when they beat their own best. Powers the solo
+// high-score leaderboard.
+model SoloScore {
+  id       String @id @default(cuid())
+  userId   String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameType String // "trivia"
+  pack     String @default("random")
+
+  score   Int @default(0)
+  correct Int @default(0)
+  total   Int @default(0)
+  timeMs  Int @default(0)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, gameType])
+  @@index([gameType, score])
 }
 
 // Per-game breakdown of a player's record (powers per-game leaderboards and the

@@ -20,6 +20,7 @@ import { prisma }                                 from "./db.js";
 import statsRoutes                                 from "./api/statsRoutes.js";
 import dailyRoutes                                 from "./api/dailyRoutes.js";
 import triviaRoutes                                from "./api/triviaRoutes.js";
+import soloRoutes                                  from "./api/soloRoutes.js";
 
 // Game engines
 import { startReactionGame, handleClick,
@@ -132,6 +133,9 @@ app.use("/api/daily", dailyRoutes);
 
 // ── Trivia pack metadata API ──────────────────────────────────────────────────
 app.use("/api/trivia", triviaRoutes);
+
+// ── Solo mode API ─────────────────────────────────────────────────────────────
+app.use("/api/solo", soloRoutes);
 
 const server = http.createServer(app);
 
