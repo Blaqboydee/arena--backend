@@ -1,0 +1,39 @@
+name: Keep backend warm
+
+# Render's free tier spins the server down after ~15 minutes of no traffic, and
+# the next visitor then eats a ~55s cold start (brutal on mobile Safari, which
+# freezes the tab mid-wait). This pings /ping every 10 minutes so the server
+# effectively never sleeps. The repo is public, so Actions minutes are free.
+#
+# Note: GitHub's scheduler is best-effort and can delay a run by several minutes
+# under load, so this is belt-and-suspenders — an external monitor like
+# UptimeRobot (5-min interval) is the most reliable keep-warm. Running both is
+# fine and recommended.
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # every 10 minutes (UTC)
+  workflow_dispatch: {}       # lets you trigger a manual wake from the Actions tab
+
+# If a run is still going when the next fires, skip the new one rather than queue.
+concurrency:
+  group: keep-warm
+  cancel-in-progress: false
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping /ping
+        # Change PING_URL if the backend's Render URL ever changes. It's a public
+        # health endpoint (returns 200, no body), so it's safe to keep in plain sight.
+        env:
+          PING_URL: https://arena-backend-xx39.onrender.com/ping
+        run: |
+          echo "Pinging $PING_URL (cold starts can take ~55s)…"
+          code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 --retry 2 --retry-delay 15 "$PING_URL" || echo "000")
+          echo "HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::warning::Keep-warm ping did not return 200 (got $code)"
+          fi
