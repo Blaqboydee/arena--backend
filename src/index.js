@@ -246,6 +246,10 @@ function startGame(room, config = {}) {
 // ── Shared match-start helper ─────────────────────────────────────────────────
 
 function launchMatch(room, config = {}) {
+  // Remember how this match was configured so "Play again" can replay it
+  // (e.g. the trivia pack + question count) without re-asking the host.
+  room.lastConfig = config;
+
   const players = getPlayerList(room);
 
   // Snapshot participants (socket id → persistent userId) at match start, so the
@@ -273,6 +277,30 @@ function launchMatch(room, config = {}) {
   );
 
   startGame(room, config);
+}
+
+// ── Room exit / rematch helpers ───────────────────────────────────────────────
+
+// True while a match is actually running (every engine nulls its state on end).
+function matchInProgress(room) {
+  const s = room.state || {};
+  return Boolean(s.ttt || s.hm || s.c4 || s.wdl || s.wyr || s.mem || s.triv || s.bomb || s.match);
+}
+
+// If the departing player was in a live match, run that game's forfeit so the
+// remaining player(s) get a clean result. Returns true if a forfeit fired.
+function forfeitIfInMatch(room, socketId) {
+  const s = room.state;
+  if (room.gameType === "tictactoe"     && s.ttt)   { handleTttForfeit(io, room, socketId);      return true; }
+  if (room.gameType === "hangman"       && s.hm)    { handleHmForfeit(io, room, socketId);       return true; }
+  if (room.gameType === "connectfour"   && s.c4)    { handleC4Forfeit(io, room, socketId);       return true; }
+  if (room.gameType === "wordle"        && s.wdl)   { handleWdlForfeit(io, room, socketId);      return true; }
+  if (room.gameType === "wouldyourather"&& s.wyr)   { handleWyrForfeit(io, room, socketId);      return true; }
+  if (room.gameType === "reaction"      && s.match) { handleReactionForfeit(io, room, socketId); return true; }
+  if (room.gameType === "memoryduel"    && s.mem)   { handleMemForfeit(io, room, socketId);      return true; }
+  if (room.gameType === "triviaroyale"  && s.triv)  { handleTrivForfeit(io, room, socketId);     return true; }
+  if (room.gameType === "bombdefusal"   && s.bomb)  { handleBombForfeit(io, room, socketId);     return true; }
+  return false;
 }
 
 // ── Socket events ─────────────────────────────────────────────────────────────
@@ -575,6 +603,38 @@ io.on("connection", (socket) => {
     handleBombEndMatch(io, socket, room);
   });
 
+  // ── 6c. Leave a room (clean exit from the game screen) ────────────────────────
+  // Unlike disconnect, the socket stays connected — this just removes the player
+  // from the room so they don't linger as a "ghost" and block a rematch. If they
+  // bail mid-match it still forfeits; after a match it's silent.
+  socket.on("leave_room", () => {
+    const room = handlePlayerLeave(socket.id);
+    if (!room) return;
+    socket.leave(room.id);
+    forfeitIfInMatch(room, socket.id);
+    if (room.players.length === 0 || room.status === "finished") {
+      removeRoom(room.id);
+    }
+  });
+
+  // ── 6d. Play again (host restarts the same game, same room) ───────────────────
+  socket.on("play_again", ({ roomId }) => {
+    const room = getRoom(roomId);
+    if (!room) return;
+    if (room.players[0]?.id !== socket.id) return;        // host only
+    if (matchInProgress(room)) return;                     // a match is still running
+    const minPlayers = getMinPlayers(room.gameType);
+    if (room.players.length < minPlayers) {
+      socket.emit("play_again_failed", {
+        message: room.players.length <= 1
+          ? "Everyone else left the room."
+          : `Need ${minPlayers} players to replay.`,
+      });
+      return;
+    }
+    launchMatch(room, room.lastConfig ?? {});
+  });
+
   // ── 7. Disconnect ───────────────────────────────────────────────────────────
   socket.on("disconnect", () => {
     console.log(`[socket] disconnected: ${socket.id}`);
@@ -587,31 +647,10 @@ io.on("connection", (socket) => {
     const room = handlePlayerLeave(socket.id);
     if (!room) return;
 
-    if (room.gameType === "tictactoe" && room.state.ttt) {
-      handleTttForfeit(io, room, socket.id);
-    } else if (room.gameType === "hangman" && room.state.hm) {
-      handleHmForfeit(io, room, socket.id);
-    } else if (room.gameType === "connectfour" && room.state.c4) {
-      handleC4Forfeit(io, room, socket.id);
-    } else if (room.gameType === "wordle" && room.state.wdl) {
-      handleWdlForfeit(io, room, socket.id);
-    } else if (room.gameType === "wouldyourather" && room.state.wyr) {
-      handleWyrForfeit(io, room, socket.id);
-    } else if (room.gameType === "reaction" && room.state.match) {
-      handleReactionForfeit(io, room, socket.id);
-    } else if (room.gameType === "memoryduel" && room.state.mem) {
-      handleMemForfeit(io, room, socket.id);
-    } else if (room.gameType === "triviaroyale" && room.state.triv) {
-      handleTrivForfeit(io, room, socket.id);
-    } else if (room.gameType === "bombdefusal" && room.state.bomb) {
-      handleBombForfeit(io, room, socket.id);
-    } else {
-      // Non-engine games: notify remaining player as before
-      if (room.players.length > 0) {
-        io.to(room.id).emit("opponent_left", {
-          message: "Your opponent disconnected.",
-        });
-      }
+    const forfeited = forfeitIfInMatch(room, socket.id);
+    if (!forfeited && room.players.length > 0) {
+      // Not mid-match: let any remaining player know their opponent dropped.
+      io.to(room.id).emit("opponent_left", { message: "Your opponent disconnected." });
     }
 
     if (room.players.length === 0 || room.status === "finished") {
